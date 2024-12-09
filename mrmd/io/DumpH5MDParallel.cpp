@@ -174,6 +174,50 @@ void DumpH5MDParallelImpl::writeBox(hid_t fileId, const data::Subdomain& subdoma
     CHECK_HDF5(H5Sclose(space));
     CHECK_HDF5(H5Tclose(boundaryType));
 
+
+    ///
+    std::string edgesDataset = groupName + "/edges";
+    std::vector<hsize_t> edgeDims = {3};
+
+    CHECK_HDF5(H5LTmake_dataset(
+        fileId, edgesDataset.c_str(), 1, edgeDims.data(), typeToHDF5<double>(), subdomain.diameter.data()));
+
+    //std::string dataset_name = groupName + "/edges";
+//
+    //hsize_t localDims = subdomain.diameter.size();
+    //hsize_t globalDims = subdomain.diameter.size();
+//
+    //writeParallel(fileId, dataset_name, globalDims, localDims, subdomain.diameter.data());
+
+    //std::vector<Datatype> data;
+    //data.reserve(numLocalParticles * dimensions);
+    //for (idx_t idx = 0; idx < atoms.numLocalAtoms; ++idx)
+    //{
+    //    data.emplace_back(atoms.getPos()(idx, 0));
+    //    data.emplace_back(atoms.getPos()(idx, 1));
+    //    data.emplace_back(atoms.getPos()(idx, 2));
+    //}
+    //MRMD_HOST_CHECK_EQUAL(int64_c(data.size()), numLocalParticles * dimensions);
+//
+    //std::vector<hsize_t> localDims = {1, uint64_c(numLocalParticles), dimensions};
+    //std::vector<hsize_t> globalDims = {1, uint64_c(numTotalParticles), dimensions};
+//
+    //std::string dataset_name = groupName + "/value";
+    //writeParallel(fileId, dataset_name, globalDims, localDims, data);
+//
+    //std::vector<hsize_t> dims = {1};
+    //std::vector<int64_t> step = {0};
+    //std::vector<double> time = {0};
+    //std::string stepDataset = groupName + "/step";
+    //CHECK_HDF5(H5LTmake_dataset(
+    //    fileId, stepDataset.c_str(), 1, dims.data(), typeToHDF5<int64_t>(), step.data()));
+    //std::string timeDataset = groupName + "/time";
+    //CHECK_HDF5(H5LTmake_dataset(
+    //    fileId, timeDataset.c_str(), 1, dims.data(), typeToHDF5<double>(), time.data()));
+    //CHECK_HDF5(H5Gclose(group));
+//
+//
+//
     CHECK_HDF5(H5LTset_attribute_double(
         fileId, groupName.c_str(), "edges", subdomain.diameter.data(), subdomain.diameter.size()));
     CHECK_HDF5(H5LTset_attribute_double(fileId,
