@@ -47,8 +47,8 @@ public:
     bool dumpCharge = true;
     bool dumpRelativeMass = true;
 
-    std::string posDataset = "pos";
-    std::string velDataset = "vel";
+    std::string posDataset = "position";
+    std::string velDataset = "velocity";
     std::string forceDataset = "force";
     std::string typeDataset = "type";
     std::string massDataset = "mass";
@@ -176,11 +176,20 @@ void DumpH5MDParallelImpl::writeBox(hid_t fileId, const data::Subdomain& subdoma
 
 
     ///
-    std::string edgesDataset = groupName + "/edges";
-    std::vector<hsize_t> edgeDims = {3};
+    std::string edgesGroupName = "/particles/" + config_.particleGroupName + "/edges";
+    auto group = H5Gcreate(fileId, edgesGroupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    std::vector<hsize_t> edgesStepDims = {1};
+    std::vector<int64_t> step = {0};
+    std::string edgesStepDataset = groupName + "/step";
+    CHECK_HDF5(H5LTmake_dataset(
+        fileId, edgesStepDataset.c_str(), 1, edgesStepDims.data(), typeToHDF5<int64_t>(), step.data()));
+
+    std::string edgesValueDataset = edgesGroupName + "/value";
+    std::vector<hsize_t> edgesValueDims = {3};
 
     CHECK_HDF5(H5LTmake_dataset(
-        fileId, edgesDataset.c_str(), 1, edgeDims.data(), typeToHDF5<double>(), subdomain.diameter.data()));
+        fileId, edgesValueDataset.c_str(), 1, edgesValueDims.data(), typeToHDF5<double>(), subdomain.diameter.data()));
 
     //CHECK_HDF5(H5LTset_attribute_double(
     //    fileId, groupName.c_str(), "edges", subdomain.diameter.data(), subdomain.diameter.size()));
