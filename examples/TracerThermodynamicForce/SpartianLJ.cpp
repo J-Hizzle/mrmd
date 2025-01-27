@@ -84,8 +84,8 @@ struct Config
     idx_t DriftForceUpdateInterval = 20000;
     real_t DriftForceBinSize = 0.005_r;
 
-    idx_t densitySamplingInterval = 200;
-    idx_t densityUpdateInterval = 50000;
+    idx_t densitySamplingInterval = 100;
+    idx_t densityUpdateInterval = 1000;
     real_t densityBinWidth = 0.5_r;
     real_t smoothingSigma = 2_r;
     real_t smoothingIntensity = 2_r;
@@ -186,40 +186,50 @@ void LJ(Config& config)
         if (step % config.densitySamplingInterval == 0)
         {
             thermodynamicForce.sample(atoms);
+            std::cout << "yo" << step << std::endl;
         }
 
         // density profile output
         if (config.bOutput && (step % config.outputInterval == 0))
         {
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getDensityProfile(0));
-            auto densityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
-
-            if (step == 0)
+            if (step == 0)             // print density grid on first simulation step
             {
-                for (auto i = 0; i < densityProfile.extent(0); ++i)
+                auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getDensityGrid());
+
+                for (auto i = 0; i < densityGrid.extent(0); ++i)
                 {
-                    std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
-                    auto posBin = subdomain.minCorner[0] +
-                                (i + 0.5_r) * (subdomain.maxCorner[0] - subdomain.minCorner[0]) /
-                                    densityProfile.extent(0);  // construct grid along x-direction and shifted to
-                                                            // the center of the density bins
-                    fDensityOut << posBin << append;
+                    std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
+                    fDensityOut << densityGrid(i) << append;
                 }
                 fDensityOut << std::endl;
             }
+
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getDensityProfile(0));
+            auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
             
             for (auto i = 0; i < densityProfile.extent(0); ++i)
             {
                 std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
-                fDensityOut << densityProfile(i)/densityProfileSamples << append;
+                real_t densityValue;
+                if ( numberOfDensityProfileSamples > 1 )
+                {
+                    densityValue = densityProfile(i)/numberOfDensityProfileSamples;
+                }
+                else
+                {
+                    densityValue = densityProfile(i);
+                }
+                fDensityOut << densityValue << append;
             }
             fDensityOut << std::endl;
         }
 
-        if (step % config.densityUpdateInterval == 0)
+        if (step % config.densityUpdateInterval == 0 && step > 0)
         {
             thermodynamicForce.update(config.smoothingSigma, config.smoothingIntensity);
+            std::cout << "ho" << step << std::endl;
         }
 
         thermodynamicForce.apply(atoms, weightingFunction);
@@ -271,20 +281,19 @@ void LJ(Config& config)
 
 
             // thermodynamic force output
-            if (step == 0)
+            if (step == 0)             // print thermodynamic force grid on first simulation step
             {
-                for (auto i = 0; i < Fth.extent(0); ++i)
+                auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                            thermodynamicForce.getForceGrid());
+
+                for (auto i = 0; i < FthGrid.extent(0); ++i)
                 {
-                    std::string append = (i < Fth.extent(0) - 1) ? " " : "";
-                    auto posBin = subdomain.minCorner[0] +
-                                  (i + 0.5_r) * (subdomain.maxCorner[0] - subdomain.minCorner[0]) /
-                                      Fth.extent(0);  // construct grid along x-direction and
-                                                      // shifted to the center of the bins
-                    fThermodynamicForceOut << posBin << append;
+                    std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
+                    fThermodynamicForceOut << FthGrid(i) << append;
                 }
                 fThermodynamicForceOut << std::endl;
             }
-
+            
             for (auto i = 0; i < Fth.extent(0); ++i)
             {
                 std::string append = (i < Fth.extent(0) - 1) ? " " : "";
