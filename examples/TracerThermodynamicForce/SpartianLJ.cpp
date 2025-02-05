@@ -42,6 +42,7 @@
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
+#include "util/applicationRegion.hpp"
 
 using namespace mrmd;
 
@@ -57,18 +58,15 @@ struct Config
     // simulation box parameters
     real_t rho = 0.86_r;
 
-    // thermodynamic force parameters
-    real_t thermodynamicForceModulation = 2_r;
-
     // LJ parameters
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
-    real_t rc = 2.5_r;
-    // capping radius?
+    real_t rCut = 2.5_r;
+    real_t rCap = 0.82_r;
 
     // neighborlist parameters
     real_t skin = 0.3_r;
-    real_t neighborCutoff = rc + skin;
+    real_t neighborCutoff = rCut + skin;
     real_t cell_ratio = 0.5_r;
     idx_t estimatedMaxNeighbors = 60;
 
@@ -77,6 +75,7 @@ struct Config
     real_t gamma = 1_r;
 
     // AdResS parameters
+    const weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
     real_t atomisticRegionDiameter = 10_r;
     real_t hybridRegionDiameter = 2.5_r;
     idx_t lambdaExponent = 7;
@@ -89,6 +88,12 @@ struct Config
     real_t densityBinWidth = 0.5_r;
     real_t smoothingSigma = 2_r;
     real_t smoothingIntensity = 2_r;
+
+    // thermodynamic force parameters
+    real_t thermodynamicForceModulation = 2_r;
+    real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
+    real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2.0_r * hybridRegionDiameter;
+
 };
 
 void LJ(Config& config)
@@ -118,13 +123,17 @@ void LJ(Config& config)
     auto weightingFunction = weighting_function::Slab({0_r, 0_r, 0_r},
                                                       config.atomisticRegionDiameter,
                                                       config.hybridRegionDiameter,
-                                                      config.lambdaExponent);
+                                                      config.lambdaExponent,
+                                                      config.interfaceType);
+    auto applicationRegion = util::ApplicationRegion({0_r, 0_r, 0_r}, 
+                                                     config.applicationRegionMin,
+                                                     config.applicationRegionMax);
     std::ofstream fDensityOut("densityProfile.txt");
     std::ofstream fThermodynamicForceOut("thermodynamicForce.txt");
     std::ofstream fDriftForceCompensation("driftForce.txt");
 
     // actions
-    action::LJ_IdealGas LJ(0.1_r, config.rc, config.sigma, config.epsilon, true);
+    action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, true);
     action::ThermodynamicForce thermodynamicForce(
         config.rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
     action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
@@ -190,41 +199,41 @@ void LJ(Config& config)
         }
 
         // density profile output
-        if (config.bOutput && (step % config.outputInterval == 0))
-        {
-            if (step == 0)             // print density grid on first simulation step
-            {
-                auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getDensityGrid());
-
-                for (auto i = 0; i < densityGrid.extent(0); ++i)
-                {
-                    std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
-                    fDensityOut << densityGrid(i) << append;
-                }
-                fDensityOut << std::endl;
-            }
-
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getDensityProfile(0));
-            auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
-            
-            for (auto i = 0; i < densityProfile.extent(0); ++i)
-            {
-                std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
-                real_t densityValue;
-                if ( numberOfDensityProfileSamples > 1 )
-                {
-                    densityValue = densityProfile(i)/numberOfDensityProfileSamples;
-                }
-                else
-                {
-                    densityValue = densityProfile(i);
-                }
-                fDensityOut << densityValue << append;
-            }
-            fDensityOut << std::endl;
-        }
+        //if (config.bOutput && (step % config.outputInterval == 0))
+        //{
+        //    if (step == 0)             // print density grid on first simulation step
+        //    {
+        //        auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+        //                                                thermodynamicForce.getDensityGrid());
+        //
+        //        for (auto i = 0; i < densityGrid.extent(0); ++i)
+        //        {
+        //            std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
+        //            fDensityOut << densityGrid(i) << append;
+        //        }
+        //        fDensityOut << std::endl;
+        //    }
+        //
+        //    auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+        //                                                thermodynamicForce.getDensityProfile(0));
+        //    auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
+        //    
+        //    for (auto i = 0; i < densityProfile.extent(0); ++i)
+        //    {
+        //        std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
+        //        real_t densityValue;
+        //        if ( numberOfDensityProfileSamples > 1 )
+        //        {
+        //            densityValue = densityProfile(i)/numberOfDensityProfileSamples;
+        //        }
+        //        else
+        //        {
+        //            densityValue = densityProfile(i);
+        //        }
+        //        fDensityOut << densityValue << append;
+        //    }
+        //    fDensityOut << std::endl;
+        //} // density profile output
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
@@ -232,7 +241,7 @@ void LJ(Config& config)
             std::cout << "ho" << step << std::endl;
         }
 
-        thermodynamicForce.apply(atoms, weightingFunction);
+        thermodynamicForce.apply(atoms, applicationRegion);
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
         action::ContributeMoleculeForceToAtoms::update(molecules, atoms);
         if (config.temperature >= 0)
@@ -281,25 +290,26 @@ void LJ(Config& config)
 
 
             // thermodynamic force output
-            if (step == 0)             // print thermodynamic force grid on first simulation step
-            {
-                auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                            thermodynamicForce.getForceGrid());
-
-                for (auto i = 0; i < FthGrid.extent(0); ++i)
-                {
-                    std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
-                    fThermodynamicForceOut << FthGrid(i) << append;
-                }
-                fThermodynamicForceOut << std::endl;
-            }
-            
-            for (auto i = 0; i < Fth.extent(0); ++i)
-            {
-                std::string append = (i < Fth.extent(0) - 1) ? " " : "";
-                fThermodynamicForceOut << Fth(i) << append;
-            }
-            fThermodynamicForceOut << std::endl;
+            //if (step == 0)             // print thermodynamic force grid on first simulation step
+            //{
+            //    auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+            //                                                thermodynamicForce.getForceGrid());
+            //
+            //    for (auto i = 0; i < FthGrid.extent(0); ++i)
+            //    {
+            //        std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
+            //        fThermodynamicForceOut << FthGrid(i) << append;
+            //    }
+            //    fThermodynamicForceOut << std::endl;
+            //}
+            //
+            //for (auto i = 0; i < Fth.extent(0); ++i)
+            //{
+            //    std::string append = (i < Fth.extent(0) - 1) ? " " : "";
+            //    fThermodynamicForceOut << Fth(i) << append;
+            //}
+            //fThermodynamicForceOut << std::endl;
+            // thermodynamic force output
 
             // drift force output
             auto h_meanCompensationEnergy = Kokkos::create_mirror_view_and_copy(
