@@ -13,10 +13,17 @@
 # limitations under the License.
 
 configure_file(LJ_spartian_3.lammpstrj . COPYONLY)
-add_executable(TracerThermodynamicForce
-        SpartianLJ.cpp
+add_executable(ThermoForceIterations
+        ThermoForceIterations.cpp
         )
-target_link_libraries(TracerThermodynamicForce
-        PRIVATE mrmd CLI11::CLI11 fmt::fmt
+target_link_libraries(ThermoForceIterations
+        PRIVATE mrmd CLI11::CLI11
         )
+add_executable(Equilibration
+        Equilibration.cpp
+        )
+target_link_libraries(Equilibration
+        PRIVATE mrmd CLI11::CLI11
+        )
+
 #add_test(NAME Example.TracerThermodynamicForce COMMAND ./TracerThermodynamicForce --nsteps 10 --output 5)
