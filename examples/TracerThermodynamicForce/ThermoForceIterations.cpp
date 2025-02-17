@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fmt/format.h>
-
 #include <CLI/App.hpp>
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
@@ -23,7 +21,7 @@
 #include <iostream>
 
 #include "action/ContributeMoleculeForceToAtoms.hpp"
-#include "action/LJ_IdealGas.hpp"
+#include "action/LJ_IdealGas_FAdResS.hpp"
 #include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/ThermodynamicForce.hpp"
@@ -42,7 +40,7 @@
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
-#include "util/applicationRegion.hpp"
+#include "util/ApplicationRegion.hpp"
 
 using namespace mrmd;
 
@@ -53,16 +51,17 @@ struct Config
 
     // general simulation parameters
     idx_t nsteps = 5000001;
-    real_t dt = 0.0005_r;
+    real_t dt = 0.002_r;
 
     // simulation box parameters
-    real_t rho = 0.86_r;
+    real_t rho = 1.70607_r;
 
     // LJ parameters
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
     real_t rCut = 2.5_r;
     real_t rCap = 0.82_r;
+    bool doShift = true;
 
     // neighborlist parameters
     real_t skin = 0.3_r;
@@ -71,23 +70,20 @@ struct Config
     idx_t estimatedMaxNeighbors = 60;
 
     // thermostat parameters
-    real_t temperature = 1.2_r;
-    real_t gamma = 1_r;
+    real_t temperature = 1.5_r;
+    real_t gamma = 20_r;
 
     // AdResS parameters
-    const weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
+    weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
     real_t atomisticRegionDiameter = 10_r;
     real_t hybridRegionDiameter = 2.5_r;
-    idx_t lambdaExponent = 7;
-    idx_t DriftForceSamplingInterval = 200;
-    idx_t DriftForceUpdateInterval = 20000;
-    real_t DriftForceBinSize = 0.005_r;
 
-    idx_t densitySamplingInterval = 100;
-    idx_t densityUpdateInterval = 1000;
-    real_t densityBinWidth = 0.5_r;
-    real_t smoothingSigma = 2_r;
-    real_t smoothingIntensity = 2_r;
+    idx_t densitySamplingInterval = 200;
+    idx_t densityUpdateInterval = 50000;
+
+    real_t densityBinWidth = 0.25_r;
+    real_t smoothingSigma = 1_r;
+    real_t smoothingIntensity = 0_r;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
@@ -99,8 +95,8 @@ struct Config
 void LJ(Config& config)
 {
     auto subdomain = data::Subdomain(
-        {-2.5038699752178008e+01_r, -8.3462332507260033e+00_r, -8.3462332507260033e+00_r},
-        {2.5038699752178008e+01, 8.3462332507260033e+00, 8.3462332507260033e+00},
+        {-7.112e+00_r, -4.741e+00_r, -4.741e+00_r},
+        {7.112e+00_r, 4.741e+00, 4.741e+00},
         config.neighborCutoff);
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
@@ -123,7 +119,7 @@ void LJ(Config& config)
     auto weightingFunction = weighting_function::Slab({0_r, 0_r, 0_r},
                                                       config.atomisticRegionDiameter,
                                                       config.hybridRegionDiameter,
-                                                      config.lambdaExponent,
+                                                      0, // here would be the exponent, but not necessary for abrupt interface - maybe redesign in the future?
                                                       config.interfaceType);
     auto applicationRegion = util::ApplicationRegion({0_r, 0_r, 0_r}, 
                                                      config.applicationRegionMin,
@@ -133,7 +129,7 @@ void LJ(Config& config)
     std::ofstream fDriftForceCompensation("driftForce.txt");
 
     // actions
-    action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, true);
+    action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
     action::ThermodynamicForce thermodynamicForce(
         config.rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
     action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
@@ -195,53 +191,82 @@ void LJ(Config& config)
         if (step % config.densitySamplingInterval == 0)
         {
             thermodynamicForce.sample(atoms);
-            std::cout << "yo" << step << std::endl;
         }
 
         // density profile output
-        //if (config.bOutput && (step % config.outputInterval == 0))
-        //{
-        //    if (step == 0)             // print density grid on first simulation step
-        //    {
-        //        auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-        //                                                thermodynamicForce.getDensityGrid());
-        //
-        //        for (auto i = 0; i < densityGrid.extent(0); ++i)
-        //        {
-        //            std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
-        //            fDensityOut << densityGrid(i) << append;
-        //        }
-        //        fDensityOut << std::endl;
-        //    }
-        //
-        //    auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-        //                                                thermodynamicForce.getDensityProfile(0));
-        //    auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
-        //    
-        //    for (auto i = 0; i < densityProfile.extent(0); ++i)
-        //    {
-        //        std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
-        //        real_t densityValue;
-        //        if ( numberOfDensityProfileSamples > 1 )
-        //        {
-        //            densityValue = densityProfile(i)/numberOfDensityProfileSamples;
-        //        }
-        //        else
-        //        {
-        //            densityValue = densityProfile(i);
-        //        }
-        //        fDensityOut << densityValue << append;
-        //    }
-        //    fDensityOut << std::endl;
-        //} // density profile output
+        if (config.bOutput && (step % config.outputInterval == 0))
+        {
+            if (step == 0)             // print density grid on first simulation step
+            {
+                auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getDensityProfile().createGrid());
+        
+                for (auto i = 0; i < densityGrid.extent(0); ++i)
+                {
+                    std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
+                    fDensityOut << densityGrid(i) << append;
+                }
+                fDensityOut << std::endl;
+            }
+        
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getDensityProfile(0));
+            auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
+
+            for (auto i = 0; i < densityProfile.extent(0); ++i)
+            {
+                std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
+                real_t densityValue;
+                if ( numberOfDensityProfileSamples > 1 )
+                {
+                    densityValue = densityProfile(i)/numberOfDensityProfileSamples;
+                }
+                else
+                {
+                    densityValue = densityProfile(i);
+                }
+                fDensityOut << densityValue << append;
+            }
+            fDensityOut << std::endl;
+        } // density profile output
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
             thermodynamicForce.update(config.smoothingSigma, config.smoothingIntensity);
-            std::cout << "ho" << step << std::endl;
+            //std::cout << "ho" << step << std::endl;
         }
 
+        if (config.bOutput && (step % config.outputInterval == 0))
+        {
+            // thermodynamic force output
+            auto Fth = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                           thermodynamicForce.getForce(0));
+
+            if (step == 0)             // print thermodynamic force grid on first simulation step
+            {
+                auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                            thermodynamicForce.getForce().createGrid());
+            
+                for (auto i = 0; i < FthGrid.extent(0); ++i)
+                {
+                    std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
+                    fThermodynamicForceOut << FthGrid(i) << append;
+                }
+                fThermodynamicForceOut << std::endl;
+            }
+            
+            for (auto i = 0; i < Fth.extent(0); ++i)
+            {
+                std::string append = (i < Fth.extent(0) - 1) ? " " : "";
+                fThermodynamicForceOut << Fth(i) << append;
+            }
+            fThermodynamicForceOut << std::endl;
+            // thermodynamic force output
+        }
+        //std::cout << "no" << step << std::endl;
+
         thermodynamicForce.apply(atoms, applicationRegion);
+        //std::cout << "go" << step << std::endl;
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
         action::ContributeMoleculeForceToAtoms::update(molecules, atoms);
         if (config.temperature >= 0)
@@ -287,38 +312,6 @@ void LJ(Config& config)
                              muRight,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
-
-
-            // thermodynamic force output
-            //if (step == 0)             // print thermodynamic force grid on first simulation step
-            //{
-            //    auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-            //                                                thermodynamicForce.getForceGrid());
-            //
-            //    for (auto i = 0; i < FthGrid.extent(0); ++i)
-            //    {
-            //        std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
-            //        fThermodynamicForceOut << FthGrid(i) << append;
-            //    }
-            //    fThermodynamicForceOut << std::endl;
-            //}
-            //
-            //for (auto i = 0; i < Fth.extent(0); ++i)
-            //{
-            //    std::string append = (i < Fth.extent(0) - 1) ? " " : "";
-            //    fThermodynamicForceOut << Fth(i) << append;
-            //}
-            //fThermodynamicForceOut << std::endl;
-            // thermodynamic force output
-
-            // drift force output
-            auto h_meanCompensationEnergy = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), LJ.getMeanCompensationEnergy().data);
-            for (auto i = 0; i < h_meanCompensationEnergy.extent(0); ++i)
-            {
-                fDriftForceCompensation << h_meanCompensationEnergy(i, 0) << " ";
-            }
-            fDriftForceCompensation << std::endl;
         }
     }
     auto time = timer.seconds();
