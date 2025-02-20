@@ -85,7 +85,7 @@ struct Config
 
     // thermostatting parameters
     real_t target_temperature = 1.5_r;
-    real_t temperature_relaxation_coefficient = 1.0_r;
+    real_t temperature_relaxation_coefficient = 20.0_r;
     real_t temperature_averaging_coefficient = 0.2_r;
     idx_t thermostat_interval = 1;
 
@@ -99,7 +99,7 @@ struct Config
 
     real_t densityBinWidth = 0.25_r;
     real_t smoothingSigma = 1_r;
-    real_t smoothingIntensity = 0.05_r;
+    real_t smoothingIntensity = 0.1_r;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
