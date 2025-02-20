@@ -12,17 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-configure_file(LJ_spartian_3.lammpstrj . COPYONLY)
 add_executable(ThermoForceIterations
         ThermoForceIterations.cpp
         )
 target_link_libraries(ThermoForceIterations
         PRIVATE mrmd CLI11::CLI11
         )
-add_executable(Equilibration
-        Equilibration.cpp
+add_executable(eqNVTBerendsen
+        eqNVTBerendsen.cpp
         )
-target_link_libraries(Equilibration
+target_link_libraries(eqNVTBerendsen
+        PRIVATE mrmd CLI11::CLI11
+        )
+add_executable(eqNVTLangevin
+        eqNVTLangevin.cpp
+        )
+target_link_libraries(eqNVTLangevin
         PRIVATE mrmd CLI11::CLI11
         )
 

@@ -35,32 +35,43 @@
 #include "data/MoleculesFromAtoms.hpp"
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
-#include "io/RestoreLAMMPS.hpp"
+#include "io/RestoreH5MDParallel.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
 #include "util/ApplicationRegion.hpp"
+#include "initialization.hpp"
+#include "io/DumpH5MDParallel.hpp"
+#include "io/DumpGRO.hpp"
+
 
 using namespace mrmd;
 
 struct Config
 {
+    // output parameters
     bool bOutput = true;
+    std::string fileOutH5MD = "TRThermodynamicForce.h5md";
+    std::string fileOutGro = "TRThermodynamicForce.gro";
     idx_t outputInterval = 50000;
 
-    // general simulation parameters
-    idx_t nsteps = 5000001;
-    real_t dt = 0.002_r;
+    // time parameters
+    idx_t nsteps = 1000001;
+    real_t dt = 0.002;
 
-    // simulation box parameters
-    real_t rho = 1.70607_r;
+    // input file parameters
+    std::string fileRestoreH5MD = "equilibrateLangevin.h5md";
 
-    // LJ parameters
+    // system parameters
+    const std::string resName = "Argon";
+    const std::vector<std::string> typeNames = {"Ar"};
+    
+    // interaction parameters
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
     real_t rCut = 2.5_r;
-    real_t rCap = 0.82_r;
+    real_t rCap = 0.82417464_r;
     bool doShift = true;
 
     // neighborlist parameters
@@ -69,9 +80,14 @@ struct Config
     real_t cell_ratio = 0.5_r;
     idx_t estimatedMaxNeighbors = 60;
 
-    // thermostat parameters
-    real_t temperature = 1.5_r;
-    real_t gamma = 20_r;
+    // pressure parameters
+    real_t pressure_averaging_coefficient = 0.02;
+
+    // thermostatting parameters
+    real_t target_temperature = 1.5_r;
+    real_t temperature_relaxation_coefficient = 1.0_r;
+    real_t temperature_averaging_coefficient = 0.2_r;
+    idx_t thermostat_interval = 1;
 
     // AdResS parameters
     weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
@@ -83,32 +99,32 @@ struct Config
 
     real_t densityBinWidth = 0.25_r;
     real_t smoothingSigma = 1_r;
-    real_t smoothingIntensity = 0_r;
+    real_t smoothingIntensity = 0.05_r;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
     real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
     real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2.0_r * hybridRegionDiameter;
-
 };
 
 void LJ(Config& config)
 {
-    auto subdomain = data::Subdomain(
-        {-7.112e+00_r, -4.741e+00_r, -4.741e+00_r},
-        {7.112e+00_r, 4.741e+00, 4.741e+00},
-        config.neighborCutoff);
+    // initialize
+    data::Subdomain subdomain;
+    auto atoms = data::Atoms(0);
+
+    // load data from file
+    auto mpiInfo = std::make_shared<data::MPIInfo>();
+    auto io = io::RestoreH5MDParallel(mpiInfo);
+    io.restore(config.fileRestoreH5MD, subdomain, atoms);
+    auto molecules = data::createMoleculeForEachAtom(atoms);
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
-    const idx_t numAtoms = idx_c(config.rho * volume);
-    util::Random RNG;
-    data::Atoms atoms(numAtoms * 2);
-    io::restoreLAMMPS("LJ_spartian_3.lammpstrj", atoms);
-    auto molecules = data::createMoleculeForEachAtom(atoms);
-    std::cout << "atoms added: " << atoms.numLocalAtoms << std::endl;
-
     auto rho = real_c(atoms.numLocalAtoms) / volume;
-    std::cout << "global atom density: " << rho << std::endl;
+    std::cout << "rho: " << rho << std::endl;
+
+    // output management
+    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
 
     // data allocations
     HalfVerletList moleculesVerletList;
@@ -116,29 +132,38 @@ void LJ(Config& config)
 
     Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
-    auto weightingFunction = weighting_function::Slab({0_r, 0_r, 0_r},
+
+    real_t boxCenterX = 0.5_r * (subdomain.maxCorner[0] + subdomain.minCorner[0]);
+    real_t boxCenterY = 0.5_r * (subdomain.maxCorner[1] + subdomain.minCorner[1]);
+    real_t boxCenterZ = 0.5_r * (subdomain.maxCorner[2] + subdomain.minCorner[2]);
+
+    std::cout << "x center: " << boxCenterX << std::endl;
+    std::cout << "y center: " << boxCenterY << std::endl; 
+    std::cout << "z center: " << boxCenterZ << std::endl;
+
+    auto weightingFunction = weighting_function::Slab({boxCenterX, boxCenterY, boxCenterZ},
                                                       config.atomisticRegionDiameter,
                                                       config.hybridRegionDiameter,
                                                       0, // here would be the exponent, but not necessary for abrupt interface - maybe redesign in the future?
                                                       config.interfaceType);
-    auto applicationRegion = util::ApplicationRegion({0_r, 0_r, 0_r}, 
+    auto applicationRegion = util::ApplicationRegion({boxCenterX, boxCenterY, boxCenterZ}, 
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
     std::ofstream fDensityOut("densityProfile.txt");
     std::ofstream fThermodynamicForceOut("thermodynamicForce.txt");
-    std::ofstream fDriftForceCompensation("driftForce.txt");
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
     action::ThermodynamicForce thermodynamicForce(
-        config.rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
+        rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
+    action::LangevinThermostat langevinThermostat(config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
     communication::MultiResGhostLayer ghostLayer;
 
     util::printTable(
         "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
     util::printTableSep(
         "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+
     for (auto step = 0; step < config.nsteps; ++step)
     {
         assert(atoms.numLocalAtoms == molecules.numLocalMolecules);
@@ -269,7 +294,7 @@ void LJ(Config& config)
         //std::cout << "go" << step << std::endl;
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
         action::ContributeMoleculeForceToAtoms::update(molecules, atoms);
-        if (config.temperature >= 0)
+        if (config.target_temperature >= 0)
         {
             langevinThermostat.apply(atoms);
         }
@@ -318,7 +343,6 @@ void LJ(Config& config)
     std::cout << time << std::endl;
     fDensityOut.close();
     fThermodynamicForceOut.close();
-    fDriftForceCompensation.close();
 
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
 
@@ -326,11 +350,14 @@ void LJ(Config& config)
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
          << std::endl;
     fout.close();
+
+    dump.dump(config.fileOutH5MD, subdomain, atoms);        
+    io::dumpGRO(config.fileOutGro, atoms, subdomain, 0, config.resName, config.resName, config.typeNames, false, true);
 }
 
 int main(int argc, char* argv[])  // NOLINT
 {
-    Kokkos::ScopeGuard scope_guard(argc, argv);
+    mrmd::initialize();
 
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
@@ -338,10 +365,14 @@ int main(int argc, char* argv[])  // NOLINT
     CLI::App app{"AdResS LJ-IG benchmark simulation"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("-s,--sampling", config.densitySamplingInterval, "density sampling interval");
+    app.add_option("-u,--update", config.densityUpdateInterval, "density update interval");
+
     CLI11_PARSE(app, argc, argv);
 
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
 
+    mrmd::finalize();
     return EXIT_SUCCESS;
 }
