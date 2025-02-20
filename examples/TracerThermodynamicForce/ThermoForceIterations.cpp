@@ -91,7 +91,7 @@ struct Config
 
     // AdResS parameters
     weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
-    real_t atomisticRegionDiameter = 10_r;
+    real_t atomisticRegionDiameter = 6_r;
     real_t hybridRegionDiameter = 2.5_r;
 
     idx_t densitySamplingInterval = 200;
