@@ -22,7 +22,7 @@
 #include "datatypes.hpp"
 #include "communication/GhostLayer.hpp"
 #include "action/LennardJones.hpp"
-#include "action/LangevinThermostat.hpp"
+#include "action/BerendsenThermostat.hpp"
 #include "action/VelocityVerlet.hpp"
 #include "util/PrintTable.hpp"
 #include "util/EnvironmentVariables.hpp"
@@ -31,6 +31,8 @@
 #include "analysis/SystemMomentum.hpp"
 #include "io/DumpH5MDParallel.hpp"
 #include "io/DumpGRO.hpp"
+#include "util/ExponentialMovingAverage.hpp"
+#include "initialization.hpp"
 
 using namespace mrmd;
 
@@ -38,12 +40,12 @@ struct Config
 {
     // output parameters
     bool bOutput = true;
-    std::string fileOutH5MD = "equilibration.h5md";
-    std::string fileOutGro = "equilibration.gro";
-    idx_t outputInterval = -1;
+    std::string fileOutH5MD = "equilibrateBerendsen.h5md";
+    std::string fileOutGro = "equilibrateBerendsen.gro";
+    idx_t outputInterval = 1000;
 
     // time parameters
-    idx_t nsteps = 10001;
+    idx_t nsteps = 100001;
     real_t dt = 0.001;
 
     // system parameters
@@ -54,12 +56,17 @@ struct Config
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
     real_t rCut = 2.5_r;
-    real_t rCap = 0.82_r;
+    real_t rCap = 0.0_r;
     bool doShift = true;
 
+    // pressure parameters
+    real_t pressure_averaging_coefficient = 0.02;
+
     // thermostatting parameters
-    real_t temperature = 1.5_r;
-    real_t gamma = 20_r;
+    real_t target_temperature = 1.5_r;
+    real_t temperature_relaxation_coefficient = 1.0_r;
+    real_t temperature_averaging_coefficient = 0.2_r;
+    idx_t thermostat_interval = 1;
 
     // box parameters
     real_t Lx = 45.0_r;
@@ -87,6 +94,7 @@ data::Atoms fillDomainWithAtomsSC(const data::Subdomain& subdomain,
     auto mass = atoms.getMass();
     auto type = atoms.getType();
     auto charge = atoms.getCharge();
+    auto relativeMass = atoms.getRelativeMass();
 
     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t idx)
@@ -102,6 +110,7 @@ data::Atoms fillDomainWithAtomsSC(const data::Subdomain& subdomain,
     RNG.free_state(randGen);
 
     mass(idx) = 1_r;
+    relativeMass(idx) = 1_r;
     type(idx) = 0;
     charge(idx) = 0_r;
 };
@@ -112,7 +121,7 @@ data::Atoms fillDomainWithAtomsSC(const data::Subdomain& subdomain,
     return atoms;
 }
 
-void equilibrate(Config& config)
+void equilibrateBerendsen(Config& config)
     {
         // initialize
         auto subdomain =
@@ -123,26 +132,44 @@ void equilibrate(Config& config)
         std::cout << "rho: " << rho << std::endl;
 
         // output management
-        auto mpiInfo = std::make_shared<data::MPIInfo>(MPI_COMM_WORLD);
+        auto mpiInfo = std::make_shared<data::MPIInfo>();
         auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
-        io::dumpGRO("equilibration_initial.gro", atoms, subdomain, 0_r, "Argon", config.resName, config.typeNames, false);
+        io::dumpGRO("equilibrateBerendsenInitial.gro", atoms, subdomain, 0_r, "Argon", config.resName, config.typeNames, false, true);
 
         // technical setup
         communication::GhostLayer ghostLayer;
         action::LennardJones LJ(config.rCut, config.sigma, config.epsilon, 0.5_r * config.sigma);
-        action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
         HalfVerletList verletList;
         Kokkos::Timer timer;
         real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
         idx_t rebuildCounter = 0;
+        util::ExponentialMovingAverage currentPressure(
+            config.pressure_averaging_coefficient);
+        util::ExponentialMovingAverage currentTemperature(
+            config.temperature_averaging_coefficient);
+        currentTemperature << analysis::getMeanKineticEnergy(atoms) * 2_r / 3_r;    
 
         // thermodynamic observables table
-        util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "p2", "Nlocal", "Nghost");
-        util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "p2", "Nlocal", "Nghost");
+        if (config.bOutput)
+        {
+            util::printTable(
+                "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
+            util::printTableSep(
+                "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
+        }
 
         for (auto step = 0; step < config.nsteps; ++step)
         {
             maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+
+            if (step % config.thermostat_interval == 0)
+            {
+                action::BerendsenThermostat::apply(
+                    atoms,
+                    currentTemperature,
+                    config.target_temperature,
+                    config.temperature_relaxation_coefficient);
+            }    
 
             if (maxAtomDisplacement >= config.skin * 0.5_r)
             {
@@ -181,36 +208,28 @@ void equilibrate(Config& config)
             Cabana::deep_copy(force, 0_r);
     
             LJ.apply(atoms, verletList);
-
-            if (config.bOutput && (step % config.outputInterval == 0))
-            {
-                auto E0 = LJ.getEnergy() / real_c(atoms.numLocalAtoms);
-                auto Ek = analysis::getKineticEnergy(atoms);
-                auto p2 = 2_r * (Ek - LJ.getVirial()) / (3_r * volume);
-                Ek /= real_c(atoms.numLocalAtoms);
-                auto systemMomentum = analysis::getSystemMomentum(atoms);
-                auto T = (2_r / 3_r) * Ek;
-                auto p = analysis::getPressure(atoms, subdomain);
     
-                util::printTable(step,
-                                 timer.seconds(),
-                                 T,
-                                 Ek,
-                                 E0,
-                                 E0 + Ek,
-                                 p,
-                                 p2,
-                                 atoms.numLocalAtoms,
-                                 atoms.numGhostAtoms);
-            }
-    
-            if (config.temperature >= 0)
-            {
-                langevinThermostat.apply(atoms);
-            }
+            auto Ek = analysis::getKineticEnergy(atoms);
+            currentPressure << 2_r * (Ek - LJ.getVirial()) / (3_r * volume);
+            Ek /= real_c(atoms.numLocalAtoms);
+            currentTemperature << (2_r / 3_r) * Ek;
 
             ghostLayer.contributeBackGhostToReal(atoms);
             action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+
+            if (config.bOutput && (step % config.outputInterval == 0))
+            {            
+                util::printTable(step,
+                                timer.seconds(),
+                                currentTemperature,
+                                currentPressure,
+                                volume,
+                                Ek,
+                                LJ.getEnergy() / real_c(atoms.numLocalAtoms),
+                                Ek + LJ.getEnergy() / real_c(atoms.numLocalAtoms),
+                                atoms.numLocalAtoms,
+                                atoms.numGhostAtoms);             
+            }
         }
         auto time = timer.seconds();
         std::cout << time << std::endl;
@@ -223,13 +242,12 @@ void equilibrate(Config& config)
         fout.close(); 
         
         dump.dump(config.fileOutH5MD, subdomain, atoms);
-        io::dumpGRO(config.fileOutGro, atoms, subdomain, 0, config.resName, config.resName, config.typeNames, false);
+        io::dumpGRO(config.fileOutGro, atoms, subdomain, 0, config.resName, config.resName, config.typeNames, false, true);
     }
 
 int main(int argc, char* argv[])
 {
-    MPI_Init(&argc, &argv);
-    Kokkos::ScopeGuard scope_guard(argc, argv);
+    mrmd::initialize();
 
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
@@ -239,9 +257,9 @@ int main(int argc, char* argv[])
     app.add_option("-o,--output", config.outputInterval, "output interval");
     CLI11_PARSE(app, argc, argv);
     if (config.outputInterval < 0) config.bOutput = false;
-    equilibrate(config);
+    equilibrateBerendsen(config);
 
-    MPI_Finalize();
+    mrmd::finalize();
 
     return EXIT_SUCCESS;
 }
