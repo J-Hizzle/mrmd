@@ -54,10 +54,10 @@ struct Config
     bool bOutput = true;
     std::string fileOutH5MD = "TRThermodynamicForce.h5md";
     std::string fileOutGro = "TRThermodynamicForce.gro";
-    idx_t outputInterval = 50000;
+    idx_t outputInterval = 100000;
 
     // time parameters
-    idx_t nsteps = 1000001;
+    idx_t nsteps = 40000001;
     real_t dt = 0.002;
 
     // input file parameters
@@ -95,16 +95,17 @@ struct Config
     real_t hybridRegionDiameter = 2.5_r;
 
     idx_t densitySamplingInterval = 200;
-    idx_t densityUpdateInterval = 50000;
+    idx_t densityUpdateInterval = 1000000;
 
-    real_t densityBinWidth = 0.25_r;
+    real_t densityBinWidth = 0.125_r;
     real_t smoothingSigma = 1_r;
-    real_t smoothingIntensity = 0.1_r;
+    real_t smoothingIntensity = 0.25_r;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
     real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
     real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2.0_r * hybridRegionDiameter;
+    bool enforceSymmetry = true;
 };
 
 void LJ(Config& config)
@@ -155,7 +156,7 @@ void LJ(Config& config)
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
     action::ThermodynamicForce thermodynamicForce(
-        rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
+        rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation, config.enforceSymmetry);
     action::LangevinThermostat langevinThermostat(config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
     communication::MultiResGhostLayer ghostLayer;
 
