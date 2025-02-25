@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
+
 #include <CLI/App.hpp>
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
@@ -50,12 +52,6 @@ using namespace mrmd;
 
 struct Config
 {
-    // output parameters
-    bool bOutput = true;
-    std::string fileOutH5MD = "TRThermodynamicForce.h5md";
-    std::string fileOutGro = "TRThermodynamicForce.gro";
-    idx_t outputInterval = 100000;
-
     // time parameters
     idx_t nsteps = 40000001;
     real_t dt = 0.002;
@@ -98,15 +94,36 @@ struct Config
     idx_t densityUpdateInterval = 1000000;
 
     real_t densityBinWidth = 0.125_r;
-    real_t smoothingSigma = 1_r;
-    real_t smoothingIntensity = 0.25_r;
+    real_t smoothingDamping = 1_r;
+    real_t smoothingInverseDamping = 1_r/smoothingDamping;
+    idx_t smoothingNeighbors = 10;
+    real_t smoothingRange = smoothingNeighbors * densityBinWidth * smoothingDamping;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
     real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
-    real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2.0_r * hybridRegionDiameter;
+    real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter;
     bool enforceSymmetry = true;
+
+    // output parameters
+    bool bOutput = true;
+    idx_t outputInterval = densityUpdateInterval;
+    std::string fileOut = "thermoForce";
+    std::string fileOutH5md = fmt::format("{0}.h5md", fileOut);
+    std::string fileOutGro = fmt::format("{0}.gro", fileOut);
+    std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
+    std::string fileOutDens = fmt::format("{0}_dens.txt", fileOut);
 };
+
+void dumpDataProfile(Kokkos::View<mrmd::real_t *, Kokkos::LayoutStride, Kokkos::HostSpace::device_type, Kokkos::MemoryManaged> dataProfile, std::ofstream& fileOut, const real_t& normalizationFactor)
+    {
+        for (auto i = 0; i < dataProfile.extent(0); ++i)
+        {
+            std::string append = (i < dataProfile.extent(0) - 1) ? " " : "";
+            fileOut << dataProfile(i) * normalizationFactor << append;
+        }
+        fileOut << std::endl;
+    }
 
 void LJ(Config& config)
 {
@@ -123,9 +140,6 @@ void LJ(Config& config)
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
-
-    // output management
-    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
 
     // data allocations
     HalfVerletList moleculesVerletList;
@@ -150,8 +164,8 @@ void LJ(Config& config)
     auto applicationRegion = util::ApplicationRegion({boxCenterX, boxCenterY, boxCenterZ}, 
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
-    std::ofstream fDensityOut("densityProfile.txt");
-    std::ofstream fThermodynamicForceOut("thermodynamicForce.txt");
+    std::ofstream fDensityOut(config.fileOutDens);
+    std::ofstream fThermodynamicForceOut(config.fileOutTF);
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
@@ -160,10 +174,23 @@ void LJ(Config& config)
     action::LangevinThermostat langevinThermostat(config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
     communication::MultiResGhostLayer ghostLayer;
 
-    util::printTable(
-        "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
-    util::printTableSep(
-        "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+    // output management
+    real_t densityBinVolume = subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth; 
+    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");  
+    if (config.bOutput)
+    {
+        util::printTable(
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+        util::printTableSep(
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+        // density profile
+        auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
+        dumpDataProfile(densityGrid, fDensityOut, 1_r);
+        // thermodynamic force
+        auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getForce().createGrid());
+        dumpDataProfile(thermoForceGrid, fThermodynamicForceOut, 1_r);
+    }
 
     for (auto step = 0; step < config.nsteps; ++step)
     {
@@ -219,80 +246,27 @@ void LJ(Config& config)
             thermodynamicForce.sample(atoms);
         }
 
-        // density profile output
         if (config.bOutput && (step % config.outputInterval == 0))
         {
-            if (step == 0)             // print density grid on first simulation step
-            {
-                auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getDensityProfile().createGrid());
-        
-                for (auto i = 0; i < densityGrid.extent(0); ++i)
-                {
-                    std::string append = (i < densityGrid.extent(0) - 1) ? " " : "";
-                    fDensityOut << densityGrid(i) << append;
-                }
-                fDensityOut << std::endl;
-            }
-        
+            // density profile output
             auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getDensityProfile(0));
+            thermodynamicForce.getDensityProfile(0));
             auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
+            real_t normalizationFactor = 1_r;
 
-            for (auto i = 0; i < densityProfile.extent(0); ++i)
+            if (numberOfDensityProfileSamples > 0)
             {
-                std::string append = (i < densityProfile.extent(0) - 1) ? " " : "";
-                real_t densityValue;
-                if ( numberOfDensityProfileSamples > 1 )
-                {
-                    densityValue = densityProfile(i)/numberOfDensityProfileSamples;
-                }
-                else
-                {
-                    densityValue = densityProfile(i);
-                }
-                fDensityOut << densityValue << append;
+            normalizationFactor = 1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
-            fDensityOut << std::endl;
-        } // density profile output
+            dumpDataProfile(densityProfile, fDensityOut, normalizationFactor);
+        }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
-            thermodynamicForce.update(config.smoothingSigma, config.smoothingIntensity);
-            //std::cout << "ho" << step << std::endl;
+            thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange);
         }
-
-        if (config.bOutput && (step % config.outputInterval == 0))
-        {
-            // thermodynamic force output
-            auto Fth = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                           thermodynamicForce.getForce(0));
-
-            if (step == 0)             // print thermodynamic force grid on first simulation step
-            {
-                auto FthGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                            thermodynamicForce.getForce().createGrid());
-            
-                for (auto i = 0; i < FthGrid.extent(0); ++i)
-                {
-                    std::string append = (i < FthGrid.extent(0) - 1) ? " " : "";
-                    fThermodynamicForceOut << FthGrid(i) << append;
-                }
-                fThermodynamicForceOut << std::endl;
-            }
-            
-            for (auto i = 0; i < Fth.extent(0); ++i)
-            {
-                std::string append = (i < Fth.extent(0) - 1) ? " " : "";
-                fThermodynamicForceOut << Fth(i) << append;
-            }
-            fThermodynamicForceOut << std::endl;
-            // thermodynamic force output
-        }
-        //std::cout << "no" << step << std::endl;
 
         thermodynamicForce.apply(atoms, applicationRegion);
-        //std::cout << "go" << step << std::endl;
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
         action::ContributeMoleculeForceToAtoms::update(molecules, atoms);
         if (config.target_temperature >= 0)
@@ -338,6 +312,11 @@ void LJ(Config& config)
                              muRight,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
+
+            //thermodnynamic force output 
+            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                        thermodynamicForce.getForce(0));
+            dumpDataProfile(thermoForce, fThermodynamicForceOut, 1_r);
         }
     }
     auto time = timer.seconds();
@@ -352,7 +331,7 @@ void LJ(Config& config)
          << std::endl;
     fout.close();
 
-    dump.dump(config.fileOutH5MD, subdomain, atoms);        
+    dump.dump(config.fileOutH5md, subdomain, atoms);        
     io::dumpGRO(config.fileOutGro, atoms, subdomain, 0, config.resName, config.resName, config.typeNames, false, true);
 }
 
@@ -363,13 +342,25 @@ int main(int argc, char* argv[])  // NOLINT
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
     Config config;
-    CLI::App app{"AdResS LJ-IG benchmark simulation"};
+    CLI::App app{"AdResS tracer thermodynamic force simulation"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
-    app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-s,--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("-u,--update", config.densityUpdateInterval, "density update interval");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
+    app.add_option("--binwidth", config.densityBinWidth, "density bin width");
+    app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
+    app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
+    app.add_option("--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+    app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
+    app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
 
     CLI11_PARSE(app, argc, argv);
+
+    config.fileOutH5md = fmt::format("{0}.h5md", config.fileOut);
+    config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
+    config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
+    config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);
 
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
