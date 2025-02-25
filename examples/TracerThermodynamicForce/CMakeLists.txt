@@ -16,7 +16,7 @@ add_executable(ThermoForceIterations
         ThermoForceIterations.cpp
         )
 target_link_libraries(ThermoForceIterations
-        PRIVATE mrmd CLI11::CLI11
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
 add_executable(eqNVTBerendsen
         eqNVTBerendsen.cpp
