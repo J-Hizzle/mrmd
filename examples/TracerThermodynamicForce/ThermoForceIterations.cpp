@@ -361,6 +361,7 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);
+    config.smoothingRange = config.smoothingNeighbors * config.densityBinWidth * config.smoothingDamping;
 
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
