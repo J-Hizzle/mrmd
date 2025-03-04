@@ -285,22 +285,8 @@ void LJ(Config& config)
             E0 /= real_c(atoms.numLocalAtoms);
 
             // calc chemical potential
-            auto Fth = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                           thermodynamicForce.getForce(0));
-            
-            auto muLeft = 0_r;
-            for (auto i = 0; i < Fth.extent(0) / 2; ++i)
-            {
-                muLeft += Fth(i);
-            }
-            muLeft *= thermodynamicForce.getForce().binSize;
-            
-            auto muRight = 0_r;
-            for (auto i = Fth.extent(0) / 2; i < Fth.extent(0); ++i)
-            {
-                muRight += Fth(i);
-            }
-            muRight *= thermodynamicForce.getForce().binSize;
+            auto muLeft = thermodynamicForce.getMuLeft()[0];
+            auto muRight = thermodynamicForce.getMuRight()[0];
             
             util::printTable(step,
                              timer.seconds(),
