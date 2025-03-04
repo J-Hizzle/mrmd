@@ -1,11 +1,11 @@
 // Copyright 2024 Sebastian Eibl
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,16 +37,15 @@
 #include "data/MoleculesFromAtoms.hpp"
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
+#include "initialization.hpp"
+#include "io/DumpGRO.hpp"
+#include "io/DumpH5MDParallel.hpp"
 #include "io/RestoreH5MDParallel.hpp"
+#include "util/ApplicationRegion.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
-#include "util/ApplicationRegion.hpp"
-#include "initialization.hpp"
-#include "io/DumpH5MDParallel.hpp"
-#include "io/DumpGRO.hpp"
-
 
 using namespace mrmd;
 
@@ -62,7 +61,7 @@ struct Config
     // system parameters
     const std::string resName = "Argon";
     const std::vector<std::string> typeNames = {"Ar"};
-    
+
     // interaction parameters
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
@@ -86,7 +85,8 @@ struct Config
     idx_t thermostat_interval = 1;
 
     // AdResS parameters
-    weighting_function::Slab::InterfaceType interfaceType = weighting_function::Slab::InterfaceType::ABRUPT;
+    weighting_function::Slab::InterfaceType interfaceType =
+        weighting_function::Slab::InterfaceType::ABRUPT;
     real_t atomisticRegionDiameter = 6_r;
     real_t hybridRegionDiameter = 2.5_r;
 
@@ -95,7 +95,7 @@ struct Config
 
     real_t densityBinWidth = 0.125_r;
     real_t smoothingDamping = 1_r;
-    real_t smoothingInverseDamping = 1_r/smoothingDamping;
+    real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
     real_t smoothingRange = smoothingNeighbors * densityBinWidth * smoothingDamping;
 
@@ -115,15 +115,20 @@ struct Config
     std::string fileOutDens = fmt::format("{0}_dens.txt", fileOut);
 };
 
-void dumpDataProfile(Kokkos::View<mrmd::real_t *, Kokkos::LayoutStride, Kokkos::HostSpace::device_type, Kokkos::MemoryManaged> dataProfile, std::ofstream& fileOut, const real_t& normalizationFactor)
+void dumpDataProfile(Kokkos::View<mrmd::real_t*,
+                                  Kokkos::LayoutStride,
+                                  Kokkos::HostSpace::device_type,
+                                  Kokkos::MemoryManaged> dataProfile,
+                     std::ofstream& fileOut,
+                     const real_t& normalizationFactor)
+{
+    for (auto i = 0; i < dataProfile.extent(0); ++i)
     {
-        for (auto i = 0; i < dataProfile.extent(0); ++i)
-        {
-            std::string append = (i < dataProfile.extent(0) - 1) ? " " : "";
-            fileOut << dataProfile(i) * normalizationFactor << append;
-        }
-        fileOut << std::endl;
+        std::string append = (i < dataProfile.extent(0) - 1) ? " " : "";
+        fileOut << dataProfile(i) * normalizationFactor << append;
     }
+    fileOut << std::endl;
+}
 
 void LJ(Config& config)
 {
@@ -153,15 +158,17 @@ void LJ(Config& config)
     real_t boxCenterZ = 0.5_r * (subdomain.maxCorner[2] + subdomain.minCorner[2]);
 
     std::cout << "x center: " << boxCenterX << std::endl;
-    std::cout << "y center: " << boxCenterY << std::endl; 
+    std::cout << "y center: " << boxCenterY << std::endl;
     std::cout << "z center: " << boxCenterZ << std::endl;
 
-    auto weightingFunction = weighting_function::Slab({boxCenterX, boxCenterY, boxCenterZ},
-                                                      config.atomisticRegionDiameter,
-                                                      config.hybridRegionDiameter,
-                                                      0, // here would be the exponent, but not necessary for abrupt interface - maybe redesign in the future?
-                                                      config.interfaceType);
-    auto applicationRegion = util::ApplicationRegion({boxCenterX, boxCenterY, boxCenterZ}, 
+    auto weightingFunction =
+        weighting_function::Slab({boxCenterX, boxCenterY, boxCenterZ},
+                                 config.atomisticRegionDiameter,
+                                 config.hybridRegionDiameter,
+                                 0,  // here would be the exponent, but not necessary for abrupt
+                                     // interface - maybe redesign in the future?
+                                 config.interfaceType);
+    auto applicationRegion = util::ApplicationRegion({boxCenterX, boxCenterY, boxCenterZ},
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
     std::ofstream fDensityOut(config.fileOutDens);
@@ -169,14 +176,19 @@ void LJ(Config& config)
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
-    action::ThermodynamicForce thermodynamicForce(
-        rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation, config.enforceSymmetry);
-    action::LangevinThermostat langevinThermostat(config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
+    action::ThermodynamicForce thermodynamicForce(rho,
+                                                  subdomain,
+                                                  config.densityBinWidth,
+                                                  config.thermodynamicForceModulation,
+                                                  config.enforceSymmetry);
+    action::LangevinThermostat langevinThermostat(
+        config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
     communication::MultiResGhostLayer ghostLayer;
 
     // output management
-    real_t densityBinVolume = subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth; 
-    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");  
+    real_t densityBinVolume =
+        subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
+    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
     if (config.bOutput)
     {
         util::printTable(
@@ -184,11 +196,12 @@ void LJ(Config& config)
         util::printTableSep(
             "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
         // density profile
-        auto densityGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
+        auto densityGrid = Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
         dumpDataProfile(densityGrid, fDensityOut, 1_r);
         // thermodynamic force
-        auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getForce().createGrid());
+        auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), thermodynamicForce.getForce().createGrid());
         dumpDataProfile(thermoForceGrid, fThermodynamicForceOut, 1_r);
     }
 
@@ -249,14 +262,16 @@ void LJ(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // density profile output
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-            thermodynamicForce.getDensityProfile(0));
-            auto numberOfDensityProfileSamples = thermodynamicForce.getNumberOfDensityProfileSamples();
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+            auto numberOfDensityProfileSamples =
+                thermodynamicForce.getNumberOfDensityProfileSamples();
             real_t normalizationFactor = 1_r;
 
             if (numberOfDensityProfileSamples > 0)
             {
-            normalizationFactor = 1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
+                normalizationFactor =
+                    1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
             dumpDataProfile(densityProfile, fDensityOut, normalizationFactor);
         }
@@ -287,7 +302,7 @@ void LJ(Config& config)
             // calc chemical potential
             auto muLeft = thermodynamicForce.getMuLeft()[0];
             auto muRight = thermodynamicForce.getMuRight()[0];
-            
+
             util::printTable(step,
                              timer.seconds(),
                              T,
@@ -299,9 +314,9 @@ void LJ(Config& config)
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
 
-            //thermodnynamic force output 
+            // thermodnynamic force output
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                        thermodynamicForce.getForce(0));
+                                                                   thermodynamicForce.getForce(0));
             dumpDataProfile(thermoForce, fThermodynamicForceOut, 1_r);
         }
     }
@@ -317,8 +332,16 @@ void LJ(Config& config)
          << std::endl;
     fout.close();
 
-    dump.dump(config.fileOutH5md, subdomain, atoms);        
-    io::dumpGRO(config.fileOutGro, atoms, subdomain, 0, config.resName, config.resName, config.typeNames, false, true);
+    dump.dump(config.fileOutH5md, subdomain, atoms);
+    io::dumpGRO(config.fileOutGro,
+                atoms,
+                subdomain,
+                0,
+                config.resName,
+                config.resName,
+                config.typeNames,
+                false,
+                true);
 }
 
 int main(int argc, char* argv[])  // NOLINT
@@ -337,7 +360,8 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--binwidth", config.densityBinWidth, "density bin width");
     app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
-    app.add_option("--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+    app.add_option(
+        "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
 
@@ -347,7 +371,8 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);
-    config.smoothingRange = config.smoothingNeighbors * config.densityBinWidth * config.smoothingDamping;
+    config.smoothingRange =
+        config.smoothingNeighbors * config.densityBinWidth * config.smoothingDamping;
 
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
