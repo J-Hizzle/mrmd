@@ -188,7 +188,7 @@ void LJ(Config& config)
     // output management
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
-    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
     if (config.bOutput)
     {
         util::printTable(
@@ -203,6 +203,7 @@ void LJ(Config& config)
         auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getForce().createGrid());
         dumpDataProfile(thermoForceGrid, fThermodynamicForceOut, 1_r);
+        dumpH5MD.open(config.fileOutH5md, atoms);
     }
 
     for (auto step = 0; step < config.nsteps; ++step)
@@ -318,6 +319,8 @@ void LJ(Config& config)
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
                                                                    thermodynamicForce.getForce(0));
             dumpDataProfile(thermoForce, fThermodynamicForceOut, 1_r);
+
+            dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
     auto time = timer.seconds();
@@ -332,7 +335,6 @@ void LJ(Config& config)
          << std::endl;
     fout.close();
 
-    dump.dump(config.fileOutH5md, subdomain, atoms);
     io::dumpGRO(config.fileOutGro,
                 atoms,
                 subdomain,
@@ -342,6 +344,8 @@ void LJ(Config& config)
                 config.typeNames,
                 false,
                 true);
+
+    dumpH5MD.close();
 }
 
 int main(int argc, char* argv[])  // NOLINT
