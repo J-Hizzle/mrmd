@@ -46,6 +46,8 @@
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
+#include "io/DumpProfile.hpp"
+#include "io/DumpThermoForce.hpp"
 
 using namespace mrmd;
 
@@ -113,22 +115,8 @@ struct Config
     std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
     std::string fileOutDens = fmt::format("{0}_dens.txt", fileOut);
+    std::string fileOutFinalTF = fmt::format("{0}_final_tf.txt", fileOut);
 };
-
-void dumpDataProfile(Kokkos::View<mrmd::real_t*,
-                                  Kokkos::LayoutStride,
-                                  Kokkos::HostSpace::device_type,
-                                  Kokkos::MemoryManaged> dataProfile,
-                     std::ofstream& fileOut,
-                     const real_t& normalizationFactor)
-{
-    for (auto i = 0; i < dataProfile.extent(0); ++i)
-    {
-        std::string append = (i < dataProfile.extent(0) - 1) ? " " : "";
-        fileOut << dataProfile(i) * normalizationFactor << append;
-    }
-    fileOut << std::endl;
-}
 
 void LJ(Config& config)
 {
@@ -171,8 +159,6 @@ void LJ(Config& config)
     auto applicationRegion = util::ApplicationRegion({boxCenterX, boxCenterY, boxCenterZ},
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
-    std::ofstream fDensityOut(config.fileOutDens);
-    std::ofstream fThermodynamicForceOut(config.fileOutTF);
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
@@ -186,6 +172,8 @@ void LJ(Config& config)
     communication::MultiResGhostLayer ghostLayer;
 
     // output management
+    io::DumpProfile dumpDens; 
+    io::DumpProfile dumpThermoForce;
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
     auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
@@ -198,11 +186,11 @@ void LJ(Config& config)
         // density profile
         auto densityGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
-        dumpDataProfile(densityGrid, fDensityOut, 1_r);
+        dumpDens.open(config.fileOutDens, densityGrid);
         // thermodynamic force
         auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getForce().createGrid());
-        dumpDataProfile(thermoForceGrid, fThermodynamicForceOut, 1_r);
+        dumpThermoForce.open(config.fileOutTF, thermoForceGrid);
         dumpH5MD.open(config.fileOutH5md, atoms);
     }
 
@@ -221,16 +209,6 @@ void LJ(Config& config)
             maxAtomDisplacement = 0_r;
 
             ghostLayer.exchangeRealAtoms(molecules, atoms, subdomain);
-
-            //            real_t gridDelta[3] = {
-            //                config.neighborCutoff, config.neighborCutoff, config.neighborCutoff};
-            //            LinkedCellList linkedCellList(atoms.getPos(),
-            //                                          0,
-            //                                          atoms.numLocalAtoms,
-            //                                          gridDelta,
-            //                                          subdomain.minCorner.data(),
-            //                                          subdomain.maxCorner.data());
-            //            atoms.permute(linkedCellList);
 
             ghostLayer.createGhostAtoms(molecules, atoms, subdomain);
             moleculesVerletList.build(molecules.getPos(),
@@ -263,18 +241,18 @@ void LJ(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // density profile output
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                                      thermodynamicForce.getDensityProfile(0));
             auto numberOfDensityProfileSamples =
                 thermodynamicForce.getNumberOfDensityProfileSamples();
-            real_t normalizationFactor = 1_r;
-
+            
+            real_t normalizationFactor = 1_r/densityBinVolume;
             if (numberOfDensityProfileSamples > 0)
             {
                 normalizationFactor =
                     1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
-            dumpDataProfile(densityProfile, fDensityOut, normalizationFactor);
+            dumpDens.dumpStep(densityProfile, normalizationFactor);
         }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
@@ -315,37 +293,44 @@ void LJ(Config& config)
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
 
-            // thermodnynamic force output
+            // thermodynamic force output
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
                                                                    thermodynamicForce.getForce(0));
-            dumpDataProfile(thermoForce, fThermodynamicForceOut, 1_r);
-
+            dumpThermoForce.dumpStep(thermoForce);
+            
+            // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
+    dumpDens.close();
+    dumpThermoForce.close();
+    dumpH5MD.close();
+
+    if (config.bOutput)
+    {
+        io::dumpGRO(config.fileOutGro,
+            atoms,
+            subdomain,
+            0,
+            config.resName,
+            config.resName,
+            config.typeNames,
+            false,
+            true);
+        
+        // thermodynamic force output
+        io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
+    }
+    
+    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
+
     auto time = timer.seconds();
     std::cout << time << std::endl;
-    fDensityOut.close();
-    fThermodynamicForceOut.close();
-
-    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
 
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-         << std::endl;
+            << std::endl;
     fout.close();
-
-    io::dumpGRO(config.fileOutGro,
-                atoms,
-                subdomain,
-                0,
-                config.resName,
-                config.resName,
-                config.typeNames,
-                false,
-                true);
-
-    dumpH5MD.close();
 }
 
 int main(int argc, char* argv[])  // NOLINT
@@ -375,6 +360,8 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);
+    config.fileOutFinalTF = fmt::format("{0}_final_tf.txt", config.fileOut);
+
     config.smoothingRange =
         config.smoothingNeighbors * config.densityBinWidth * config.smoothingDamping;
 
