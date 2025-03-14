@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(ThermoForceIterations
-        ThermoForceIterations.cpp
-        )
-target_link_libraries(ThermoForceIterations
-        PRIVATE mrmd CLI11::CLI11 fmt::fmt
-        )
 add_executable(eqNVTBerendsen
         eqNVTBerendsen.cpp
         )
@@ -29,6 +23,18 @@ add_executable(eqNVTLangevin
         )
 target_link_libraries(eqNVTLangevin
         PRIVATE mrmd CLI11::CLI11
+        )
+add_executable(ThermoForceIterations
+        ThermoForceIterations.cpp
+        )
+target_link_libraries(ThermoForceIterations
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
+        )
+add_executable(TracerProductionNVT
+        TracerProductionNVT.cpp
+        )
+target_link_libraries(TracerProductionNVT
+        PRIVATE mrmd
         )
 
 #add_test(NAME Example.TracerThermodynamicForce COMMAND ./TracerThermodynamicForce --nsteps 10 --output 5)
