@@ -29,18 +29,37 @@ void dumpThermoForce(const std::string& filename,
                      const idx_t& typeId)
 {
     DumpProfile dumpThermoForce;
-    ScalarView forceView("force-view", thermoForce.getForce().numBins);
-    Kokkos::deep_copy(forceView, thermoForce.getForce(typeId));
+    auto numBins = thermoForce.getForce().createGrid().size();
+    ScalarView forceView("forceView", numBins);
+
+    auto policy = Kokkos::RangePolicy<>(0, numBins);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
+        forceView(idx) = thermoForce.getForce(typeId)(idx);
+    };
+    Kokkos::parallel_for(policy, kernel);
+    Kokkos::fence();
+
     dumpThermoForce.dump(filename, thermoForce.getForce().createGrid(), forceView);
 }
 void dumpThermoForce(const std::string& filename, const action::ThermodynamicForce& thermoForce)
 {
     DumpProfile dumpThermoForce;
     dumpThermoForce.open(filename, thermoForce.getForce().createGrid());
+    auto numBins = thermoForce.getForce().createGrid().size();
+
     for (idx_t typeId = 0; typeId < thermoForce.getForce().numHistograms; typeId++)
     {
-        ScalarView forceView("force-view", thermoForce.getForce().numBins);
-        Kokkos::deep_copy(forceView, thermoForce.getForce(typeId));
+        ScalarView forceView("forceTest", numBins);
+
+        auto policy = Kokkos::RangePolicy<>(0, numBins);
+        auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+        {
+            forceView(idx) = thermoForce.getForce(typeId)(idx);
+        };
+        Kokkos::parallel_for(policy, kernel);
+        Kokkos::fence();
+
         dumpThermoForce.dumpStep(forceView);
     }
     dumpThermoForce.close();
