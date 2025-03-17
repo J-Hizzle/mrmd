@@ -40,14 +40,14 @@
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MDParallel.hpp"
+#include "io/DumpProfile.hpp"
+#include "io/DumpThermoForce.hpp"
 #include "io/RestoreH5MDParallel.hpp"
 #include "util/ApplicationRegion.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
-#include "io/DumpProfile.hpp"
-#include "io/DumpThermoForce.hpp"
 
 using namespace mrmd;
 
@@ -173,7 +173,7 @@ void LJ(Config& config)
     communication::MultiResGhostLayer ghostLayer;
 
     // output management
-    io::DumpProfile dumpDens; 
+    io::DumpProfile dumpDens;
     io::DumpProfile dumpThermoForce;
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
@@ -242,12 +242,12 @@ void LJ(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // density profile output
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                                      thermodynamicForce.getDensityProfile(0));
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
             auto numberOfDensityProfileSamples =
                 thermodynamicForce.getNumberOfDensityProfileSamples();
-            
-            real_t normalizationFactor = 1_r/densityBinVolume;
+
+            real_t normalizationFactor = 1_r / densityBinVolume;
             if (numberOfDensityProfileSamples > 0)
             {
                 normalizationFactor =
@@ -298,7 +298,7 @@ void LJ(Config& config)
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
                                                                    thermodynamicForce.getForce(0));
             dumpThermoForce.dumpStep(thermoForce);
-            
+
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
@@ -308,24 +308,24 @@ void LJ(Config& config)
         dumpDens.close();
         dumpThermoForce.close();
         dumpH5MD.close();
-    
+
         // final microstates output
         dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
         io::dumpGRO(config.fileOutGro,
-            atoms,
-            subdomain,
-            0,
-            config.resName,
-            config.resName,
-            config.typeNames,
-            false,
-            true);
-        
+                    atoms,
+                    subdomain,
+                    0,
+                    config.resName,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
+
         // final thermodynamic force output
         io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
     }
-    
+
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
 
     auto time = timer.seconds();
@@ -333,7 +333,7 @@ void LJ(Config& config)
 
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-            << std::endl;
+         << std::endl;
     fout.close();
 }
 

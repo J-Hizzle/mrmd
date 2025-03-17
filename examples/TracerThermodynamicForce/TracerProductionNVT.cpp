@@ -20,23 +20,23 @@
 
 #include "action/LJ_IdealGas_FAdResS.hpp"
 #include "action/LangevinThermostat.hpp"
+#include "action/UpdateMolecules.hpp"
 #include "action/VelocityVerlet.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/SystemMomentum.hpp"
 #include "communication/MultiResGhostLayer.hpp"
-#include "datatypes.hpp"
-#include "initialization.hpp"
-#include "io/DumpGRO.hpp"
-#include "io/RestoreThermoForce.hpp"
-#include "io/RestoreH5MDParallel.hpp"
-#include "io/DumpH5MDParallel.hpp"
-#include "data/Subdomain.hpp"
 #include "data/Atoms.hpp"
 #include "data/Molecules.hpp"
 #include "data/MoleculesFromAtoms.hpp"
-#include "util/PrintTable.hpp"
-#include "action/UpdateMolecules.hpp"
+#include "data/Subdomain.hpp"
+#include "datatypes.hpp"
+#include "initialization.hpp"
+#include "io/DumpGRO.hpp"
+#include "io/DumpH5MDParallel.hpp"
+#include "io/RestoreH5MDParallel.hpp"
+#include "io/RestoreThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
+#include "util/PrintTable.hpp"
 
 using namespace mrmd;
 
@@ -54,7 +54,7 @@ struct Config
     // system parameters
     const std::string resName = "Argon";
     const std::vector<std::string> typeNames = {"Ar"};
-    
+
     // interaction parameters
     real_t sigma = 1_r;
     real_t epsilon = 1_r;
@@ -114,7 +114,7 @@ void LJ(Config& config)
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
-    
+
     // data allocations
     HalfVerletList moleculesVerletList;
     idx_t verletlistRebuildCounter = 0;
@@ -178,13 +178,13 @@ void LJ(Config& config)
 
             ghostLayer.createGhostAtoms(molecules, atoms, subdomain);
             moleculesVerletList.build(molecules.getPos(),
-                                        0,
-                                        molecules.numLocalMolecules,
-                                        config.neighborCutoff,
-                                        config.cell_ratio,
-                                        subdomain.minGhostCorner.data(),
-                                        subdomain.maxGhostCorner.data(),
-                                        config.estimatedMaxNeighbors);
+                                      0,
+                                      molecules.numLocalMolecules,
+                                      config.neighborCutoff,
+                                      config.cell_ratio,
+                                      subdomain.minGhostCorner.data(),
+                                      subdomain.maxGhostCorner.data(),
+                                      config.estimatedMaxNeighbors);
             ++verletlistRebuildCounter;
         }
         else
@@ -231,36 +231,36 @@ void LJ(Config& config)
                              muRight,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
-            
+
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
         if (config.bOutput)
         {
             dumpH5MD.close();
-        
+
             // final microstates output
             dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
             io::dumpGRO(config.fileOutGro,
-                atoms,
-                subdomain,
-                0,
-                config.resName,
-                config.resName,
-                config.typeNames,
-                false,
-                true);
+                        atoms,
+                        subdomain,
+                        0,
+                        config.resName,
+                        config.resName,
+                        config.typeNames,
+                        false,
+                        true);
         }
         auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
 
         auto time = timer.seconds();
         std::cout << time << std::endl;
-    
+
         std::ofstream fout("ecab.perf", std::ofstream::app);
         fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-                << std::endl;
-        fout.close();    
+             << std::endl;
+        fout.close();
     }
 }
 
@@ -288,7 +288,7 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutFinalH5MD = fmt::format("{0}_final.h5md", config.fileOut);
-    
+
     LJ(config);
 
     mrmd::finalize();
