@@ -361,7 +361,7 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutFinalTF = fmt::format("{0}_final_tf.txt", config.fileOut);
 
     config.smoothingRange =
-        config.smoothingNeighbors * config.densityBinWidth * config.smoothingDamping;
+        real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
 
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
