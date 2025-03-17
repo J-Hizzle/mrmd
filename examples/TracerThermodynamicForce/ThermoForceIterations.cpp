@@ -115,6 +115,7 @@ struct Config
     std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
     std::string fileOutDens = fmt::format("{0}_dens.txt", fileOut);
+    std::string fileOutFinalH5MD = fmt::format("{0}_final.h5md", fileOut);
     std::string fileOutFinalTF = fmt::format("{0}_final_tf.txt", fileOut);
 };
 
@@ -262,7 +263,7 @@ void LJ(Config& config)
 
         thermodynamicForce.apply(atoms, applicationRegion);
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
-        action::ContributeMoleculeForceToAtoms::update(molecules, atoms);
+
         if (config.target_temperature >= 0)
         {
             langevinThermostat.apply(atoms);
@@ -302,12 +303,15 @@ void LJ(Config& config)
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
-    dumpDens.close();
-    dumpThermoForce.close();
-    dumpH5MD.close();
-
     if (config.bOutput)
     {
+        dumpDens.close();
+        dumpThermoForce.close();
+        dumpH5MD.close();
+    
+        // final microstates output
+        dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
+
         io::dumpGRO(config.fileOutGro,
             atoms,
             subdomain,
@@ -318,7 +322,7 @@ void LJ(Config& config)
             false,
             true);
         
-        // thermodynamic force output
+        // final thermodynamic force output
         io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
     }
     
@@ -360,6 +364,7 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);
+    config.fileOutFinalH5MD = fmt::format("{0}_final.h5md", config.fileOut);
     config.fileOutFinalTF = fmt::format("{0}_final_tf.txt", config.fileOut);
 
     config.smoothingRange =
