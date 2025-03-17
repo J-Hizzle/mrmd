@@ -239,8 +239,6 @@ void LJ(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // density profile output
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
             auto numberOfDensityProfileSamples =
                 thermodynamicForce.getNumberOfDensityProfileSamples();
 
@@ -250,7 +248,7 @@ void LJ(Config& config)
                 normalizationFactor =
                     1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
-            dumpDens.dumpStep(densityProfile, normalizationFactor);
+            dumpDens.dumpStep(thermodynamicForce.getDensityProfile(0), normalizationFactor);
         }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
@@ -292,9 +290,7 @@ void LJ(Config& config)
                              atoms.numGhostAtoms);
 
             // thermodynamic force output
-            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                                   thermodynamicForce.getForce(0));
-            dumpThermoForce.dumpStep(thermoForce);
+            dumpThermoForce.dumpStep(thermodynamicForce.getForce(0));
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
