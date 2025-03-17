@@ -185,13 +185,10 @@ void LJ(Config& config)
         util::printTableSep(
             "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
         // density profile
-        auto densityGrid = Kokkos::create_mirror_view_and_copy(
-            Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
-        dumpDens.open(config.fileOutDens, densityGrid);
+        dumpDens.open(config.fileOutDens, thermodynamicForce.getDensityProfile().createGrid());
         // thermodynamic force
-        auto thermoForceGrid = Kokkos::create_mirror_view_and_copy(
-            Kokkos::HostSpace(), thermodynamicForce.getForce().createGrid());
-        dumpThermoForce.open(config.fileOutTF, thermoForceGrid);
+        dumpThermoForce.open(config.fileOutTF, thermodynamicForce.getForce().createGrid());
+        // microstate
         dumpH5MD.open(config.fileOutH5md, atoms);
     }
 
