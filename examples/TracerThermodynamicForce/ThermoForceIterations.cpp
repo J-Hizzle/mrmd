@@ -99,7 +99,7 @@ struct Config
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
-    real_t smoothingRange = smoothingNeighbors * densityBinWidth * smoothingDamping;
+    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
 
     // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
