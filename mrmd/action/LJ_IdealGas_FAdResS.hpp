@@ -109,7 +109,7 @@ public:
             const real_t gradLambdaBeta[3] = {moleculesGradLambda_(beta, 0),
                                               moleculesGradLambda_(beta, 1),
                                               moleculesGradLambda_(beta, 2)};
-                              
+
             /// combined weighting of molecules alpha and beta
             const auto weighting = 0.5_r * (modulatedLambdaAlpha + modulatedLambdaBeta);
             assert(0_r <= weighting);
@@ -219,8 +219,7 @@ public:
                 const std::vector<real_t>& epsilon,
                 const idx_t numTypes,
                 const bool doShift)
-        : LJ_(cappingDistance, rc, sigma, epsilon, numTypes, doShift),
-          numTypes_(numTypes)
+        : LJ_(cappingDistance, rc, sigma, epsilon, numTypes, doShift), numTypes_(numTypes)
     {
         MRMD_HOST_ASSERT_EQUAL(cappingDistance.size(), numTypes * numTypes);
         MRMD_HOST_ASSERT_EQUAL(rc.size(), numTypes * numTypes);
