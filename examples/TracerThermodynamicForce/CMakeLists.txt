@@ -34,7 +34,7 @@ add_executable(TracerProductionNVT
         TracerProductionNVT.cpp
         )
 target_link_libraries(TracerProductionNVT
-        PRIVATE mrmd
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
 
 #add_test(NAME Example.TracerThermodynamicForce COMMAND ./TracerThermodynamicForce --nsteps 10 --output 5)
