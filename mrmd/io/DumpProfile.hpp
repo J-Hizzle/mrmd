@@ -25,21 +25,23 @@ namespace io
 class DumpProfile
 {
 public:
-    void open(const std::string& filename, const ScalarView& grid)
+    void open(const std::string& filename, const ScalarView::HostMirror& grid)
     {
         fileProfile_.open(filename);
 
+        auto gridMirror = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), grid);
         for (auto i = 0; i < grid.extent(0); ++i)
         {
-            std::string separator = (i < grid.extent(0) - 1) ? " " : "";
-            fileProfile_ << grid(i) << separator;
+            std::string separator = (i < gridMirror.extent(0) - 1) ? " " : "";
+            fileProfile_ << gridMirror(i) << separator;
         }
         fileProfile_ << std::endl;
     }
 
     void close() { fileProfile_.close(); }
 
-    void dumpStep(const ScalarView& dataProfile, const real_t& normalizationFactor = 1_r)
+    void dumpStep(const ScalarView::HostMirror& dataProfile,
+                  const real_t& normalizationFactor = 1_r)
     {
         for (auto i = 0; i < dataProfile.extent(0); ++i)
         {
@@ -50,8 +52,8 @@ public:
     }
 
     void dump(const std::string& filename,
-              const ScalarView& grid,
-              const ScalarView& dataProfile,
+              const ScalarView::HostMirror& grid,
+              const ScalarView::HostMirror& dataProfile,
               const real_t& normalizationFactor = 1_r)
     {
         open(filename, grid);

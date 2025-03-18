@@ -25,41 +25,37 @@ namespace mrmd
 namespace io
 {
 void dumpThermoForce(const std::string& filename,
-                     const action::ThermodynamicForce& thermoForce,
+                     const action::ThermodynamicForce& thermodynamicForce,
                      const idx_t& typeId)
 {
     DumpProfile dumpThermoForce;
-    auto numBins = thermoForce.getForce().createGrid().size();
-    ScalarView forceView("forceView", numBins);
-
-    auto policy = Kokkos::RangePolicy<>(0, numBins);
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    auto numBins = thermodynamicForce.getForce().createGrid().size();
+    ScalarView::HostMirror forceView("forceView", numBins);
+    auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                           thermodynamicForce.getForce(typeId));
+    for (idx_t idx = 0; idx < numBins; ++idx)
     {
-        forceView(idx) = thermoForce.getForce(typeId)(idx);
-    };
-    Kokkos::parallel_for(policy, kernel);
-    Kokkos::fence();
+        forceView(idx) = thermoForce(idx);
+    }
 
-    dumpThermoForce.dump(filename, thermoForce.getForce().createGrid(), forceView);
+    dumpThermoForce.dump(filename, thermodynamicForce.getForce().createGrid(), forceView);
 }
-void dumpThermoForce(const std::string& filename, const action::ThermodynamicForce& thermoForce)
+void dumpThermoForce(const std::string& filename,
+                     const action::ThermodynamicForce& thermodynamicForce)
 {
     DumpProfile dumpThermoForce;
-    dumpThermoForce.open(filename, thermoForce.getForce().createGrid());
-    auto numBins = thermoForce.getForce().createGrid().size();
+    auto numBins = thermodynamicForce.getForce().createGrid().size();
 
-    for (idx_t typeId = 0; typeId < thermoForce.getForce().numHistograms; typeId++)
+    dumpThermoForce.open(filename, thermodynamicForce.getForce().createGrid());
+    for (idx_t typeId = 0; typeId < thermodynamicForce.getForce().numHistograms; typeId++)
     {
-        ScalarView forceView("forceTest", numBins);
-
-        auto policy = Kokkos::RangePolicy<>(0, numBins);
-        auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+        ScalarView::HostMirror forceView("forceTest", numBins);
+        auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                               thermodynamicForce.getForce(typeId));
+        for (idx_t idx = 0; idx < numBins; ++idx)
         {
-            forceView(idx) = thermoForce.getForce(typeId)(idx);
-        };
-        Kokkos::parallel_for(policy, kernel);
-        Kokkos::fence();
-
+            forceView(idx) = thermoForce(idx);
+        }
         dumpThermoForce.dumpStep(forceView);
     }
     dumpThermoForce.close();
