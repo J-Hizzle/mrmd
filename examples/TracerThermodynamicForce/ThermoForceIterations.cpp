@@ -290,7 +290,9 @@ void LJ(Config& config)
                              atoms.numGhostAtoms);
 
             // thermodynamic force output
-            dumpThermoForce.dumpStep(thermodynamicForce.getForce(0));
+            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                                   thermodynamicForce.getForce(0));
+            dumpThermoForce.dumpStep(thermoForce);
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
