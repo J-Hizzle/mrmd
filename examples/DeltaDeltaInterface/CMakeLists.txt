@@ -38,10 +38,10 @@ add_executable(EquilibrationLangevinNVT
 target_link_libraries(EquilibrationLangevinNVT
         PRIVATE mrmd CLI11::CLI11
         )
-add_executable(ThermoForceIterations
-        ThermoForceIterations.cpp
+add_executable(TFIterationsDeltaDelta
+        TFIterationsDeltaDelta.cpp
         )
-target_link_libraries(ThermoForceIterations
+target_link_libraries(TFIterationsDeltaDelta
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
 add_executable(DeltaDeltaProductionNVT
