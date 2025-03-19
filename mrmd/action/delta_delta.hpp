@@ -104,11 +104,6 @@ public:
                                               moleculesGradLambda_(beta, 1),
                                               moleculesGradLambda_(beta, 2)};
 
-            /// combined weighting of molecules alpha and beta
-            const auto weighting = 0.5_r * (modulatedLambdaAlpha + modulatedLambdaBeta);
-            assert(0_r <= weighting);
-            assert(weighting <= 1_r);
-
             /// inclusive start index of atoms belonging to beta
             const auto startAtomsBeta = moleculesAtomsOffset_(beta);
             /// exclusive end index of atoms belonging to beta
@@ -144,7 +139,7 @@ public:
                     MRMD_DEVICE_ASSERT_LESS(typeIdx, numTypes_ * numTypes_);
                     MRMD_DEVICE_ASSERT(!std::isnan(distSqr));
                     auto forceAndEnergy = LJ_.computeForceAndEnergy(distSqr, typeIdx);
-                    auto ffactor = forceAndEnergy.forceFactor * weighting;
+                    auto ffactor = forceAndEnergy.forceFactor;
                     MRMD_DEVICE_ASSERT(!std::isnan(ffactor));
 
                     forceTmpIdx[0] += dx * ffactor;
@@ -156,7 +151,7 @@ public:
                     atomsForce_(jdx, 2) -= dz * ffactor;
 
                     MRMD_DEVICE_ASSERT(!std::isnan(forceAndEnergy.energy));
-                    sumEnergy += forceAndEnergy.energy * weighting;
+                    sumEnergy += forceAndEnergy.energy;
                     auto Vij = 0.5_r * forceAndEnergy.energy;
                 }
 
