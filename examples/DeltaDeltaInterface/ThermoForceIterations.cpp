@@ -247,7 +247,8 @@ void LJ(Config& config)
                 normalizationFactor =
                     1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
-            dumpDens.dumpStep(thermodynamicForce.getDensityProfile(0), normalizationFactor);
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+            dumpDens.dumpStep(densityProfile, normalizationFactor);
         }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
