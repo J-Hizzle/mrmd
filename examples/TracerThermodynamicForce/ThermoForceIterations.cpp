@@ -185,9 +185,11 @@ void LJ(Config& config)
         util::printTableSep(
             "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
         // density profile
-        dumpDens.open(config.fileOutDens, thermodynamicForce.getDensityProfile().createGrid());
+        dumpDens.open(config.fileOutDens);
+        dumpDens.dumpGrid(thermodynamicForce.getDensityProfile().createGrid());
         // thermodynamic force
-        dumpThermoForce.open(config.fileOutTF, thermodynamicForce.getForce().createGrid());
+        dumpThermoForce.open(config.fileOutTF);
+        dumpThermoForce.dumpGrid(thermodynamicForce.getForce().createGrid());
         // microstate
         dumpH5MD.open(config.fileOutH5md, atoms);
     }
