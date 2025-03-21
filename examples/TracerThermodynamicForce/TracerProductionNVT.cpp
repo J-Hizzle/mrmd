@@ -282,7 +282,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     CLI11_PARSE(app, argc, argv);
 
-    config.fileRestoreH5MD = fmt::format("{0}.h5md", config.fileRestore);
+    config.fileRestoreH5MD = fmt::format("{0}_final.h5md", config.fileRestore);
     config.fileRestoreTF = fmt::format("{0}_tf.txt", config.fileRestore);
     config.fileOutH5md = fmt::format("{0}.h5md", config.fileOut);
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
