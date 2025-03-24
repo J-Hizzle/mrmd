@@ -52,7 +52,8 @@ action::ThermodynamicForce restoreThermoForce(
         binNum++;
     }
     MRMD_HOST_ASSERT_GREATER(binNum, 1);
-    real_t binWidth = grid1 - grid0;
+    real_t binWidth = (subdomain.maxCorner[0] - subdomain.minCorner[0])/real_c(binNum);
+    MRMD_HOST_ASSERT_LESSEQUAL(std::abs(binWidth - (grid1 - grid0)), 0.000001);
 
     MultiView::HostMirror h_forcesRead("h_forcesRead", binNum, maxNumForces);
 
