@@ -72,7 +72,7 @@ struct Config
     real_t Lx = 45.0_r;
     real_t Ly = 30.0_r;
     real_t Lz = 30.0_r;
-    idx_t numAtoms = 15000;
+    real_t density = 0.37037;
 
     // neighbor-list parameters
     real_t cell_ratio = 1.0_r;
@@ -124,12 +124,16 @@ data::Atoms fillDomainWithAtomsSC(const data::Subdomain& subdomain,
 void equilibrateBerendsen(Config& config)
 {
     // initialize
+
     auto subdomain =
         data::Subdomain({0_r, 0_r, 0_r}, {config.Lx, config.Ly, config.Lz}, config.neighborCutoff);
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
-    auto atoms = fillDomainWithAtomsSC(subdomain, config.numAtoms, 1_r);
-    auto rho = real_c(atoms.numLocalAtoms) / volume;
-    std::cout << "rho: " << rho << std::endl;
+    idx_t numAtoms = idx_c(config.density * volume); 
+    auto atoms = fillDomainWithAtomsSC(subdomain, numAtoms, 1_r);
+
+    std::cout << "density: " << config.density << std::endl;
+    std::cout << "number of Atoms: " << numAtoms << std::endl;
+    std::cout << "volume: " << volume << std::endl;
 
     // output management
     auto mpiInfo = std::make_shared<data::MPIInfo>();
@@ -268,6 +272,8 @@ int main(int argc, char* argv[])
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("--Lx", config.Lx, "box length in x direction");
+    app.add_option("density", config.density, "particle number denstiy");
     CLI11_PARSE(app, argc, argv);
     if (config.outputInterval < 0) config.bOutput = false;
     equilibrateBerendsen(config);

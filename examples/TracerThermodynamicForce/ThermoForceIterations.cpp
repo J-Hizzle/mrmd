@@ -356,6 +356,8 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
+    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
+    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
 
     CLI11_PARSE(app, argc, argv);
 
