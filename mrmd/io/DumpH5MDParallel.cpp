@@ -39,7 +39,9 @@ class DumpH5MDParallelImpl
 public:
     explicit DumpH5MDParallelImpl(DumpH5MDParallel& config) : config_(config) {}
 
-    void open(const std::string& filename, const data::Subdomain& subdomain, const data::Atoms& atoms);
+    void open(const std::string& filename,
+              const data::Subdomain& subdomain,
+              const data::Atoms& atoms);
     void dumpStep(const data::Subdomain& subdomain,
                   const data::Atoms& atoms,
                   const idx_t step,
@@ -108,7 +110,9 @@ private:
     int64_t particleOffset = -1;
 };
 
-void DumpH5MDParallelImpl::open(const std::string& filename, const data::Subdomain& subdomain, const data::Atoms& atoms)
+void DumpH5MDParallelImpl::open(const std::string& filename,
+                                const data::Subdomain& subdomain,
+                                const data::Atoms& atoms)
 {
     MPI_Info info = MPI_INFO_NULL;
 
@@ -251,21 +255,20 @@ void DumpH5MDParallelImpl::openBox(const data::Subdomain& subdomain) const
     CHECK_HDF5(H5LTset_attribute_int(
         config_.particleSubGroupId, "box", "dimension", dims.data(), dims.size()));
     CHECK_HDF5(H5LTset_attribute_double(config_.particleSubGroupId,
-        "box",
-        "minCorner",
-        subdomain.minCorner.data(),
-        subdomain.minCorner.size()));
+                                        "box",
+                                        "minCorner",
+                                        subdomain.minCorner.data(),
+                                        subdomain.minCorner.size()));
     CHECK_HDF5(H5LTset_attribute_double(config_.particleSubGroupId,
-        "box",
-        "maxCorner",
-        subdomain.maxCorner.data(),
-        subdomain.maxCorner.size()));
+                                        "box",
+                                        "maxCorner",
+                                        subdomain.maxCorner.data(),
+                                        subdomain.maxCorner.size()));
     CHECK_HDF5(H5LTset_attribute_double(config_.particleSubGroupId,
-        "box",
-        "ghostLayerThickness",
-        &subdomain.ghostLayerThickness,
-        1));
-    
+                                        "box",
+                                        "ghostLayerThickness",
+                                        &subdomain.ghostLayerThickness,
+                                        1));
 
     auto boundaryType = H5Tcopy(H5T_C_S1);
     CHECK_HDF5(H5Tset_size(boundaryType, 8));
@@ -984,7 +987,9 @@ void DumpH5MDParallelImpl::dump(const std::string& filename,
 }
 }  // namespace impl
 
-void DumpH5MDParallel::open(const std::string& filename, const data::Subdomain& subdomain, const data::Atoms& atoms)
+void DumpH5MDParallel::open(const std::string& filename,
+                            const data::Subdomain& subdomain,
+                            const data::Atoms& atoms)
 {
     impl::DumpH5MDParallelImpl helper(*this);
     helper.open(filename, subdomain, atoms);
@@ -1013,7 +1018,9 @@ void DumpH5MDParallel::dump(const std::string& filename,
     helper.dump(filename, subdomain, atoms);
 }
 #else
-void DumpH5MDParallel::open(const std::string& /*filename*/, const data::Subdomain& /*subdomain*/, const data::Atoms& /*atoms*/)
+void DumpH5MDParallel::open(const std::string& /*filename*/,
+                            const data::Subdomain& /*subdomain*/,
+                            const data::Atoms& /*atoms*/)
 {
     MRMD_HOST_CHECK(false, "HDF5 Support not available!");
     exit(EXIT_FAILURE);
