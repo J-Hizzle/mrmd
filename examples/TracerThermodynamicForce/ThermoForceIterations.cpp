@@ -185,9 +185,11 @@ void LJ(Config& config)
         util::printTableSep(
             "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
         // density profile
-        dumpDens.open(config.fileOutDens, thermodynamicForce.getDensityProfile().createGrid());
+        dumpDens.open(config.fileOutDens);
+        dumpDens.dumpScalarView(thermodynamicForce.getDensityProfile().createGrid());
         // thermodynamic force
-        dumpThermoForce.open(config.fileOutTF, thermodynamicForce.getForce().createGrid());
+        dumpThermoForce.open(config.fileOutTF);
+        dumpThermoForce.dumpScalarView(thermodynamicForce.getForce().createGrid());
         // microstate
         dumpH5MD.open(config.fileOutH5md, atoms);
     }
@@ -250,7 +252,7 @@ void LJ(Config& config)
             }
             auto densityProfile = Kokkos::create_mirror_view_and_copy(
                 Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-            dumpDens.dumpStep(densityProfile, normalizationFactor);
+            dumpDens.dumpScalarView(densityProfile, normalizationFactor);
         }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
@@ -294,7 +296,7 @@ void LJ(Config& config)
             // thermodynamic force output
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
                                                                    thermodynamicForce.getForce(0));
-            dumpThermoForce.dumpStep(thermoForce);
+            dumpThermoForce.dumpScalarView(thermoForce);
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
