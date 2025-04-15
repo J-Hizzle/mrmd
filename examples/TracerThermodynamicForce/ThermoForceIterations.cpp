@@ -122,13 +122,15 @@ struct Config
 void LJ(Config& config)
 {
     // initialize
-    data::Subdomain subdomain;
+    data::Subdomain initialSubdomain;
     auto atoms = data::Atoms(0);
 
     // load data from file
     auto mpiInfo = std::make_shared<data::MPIInfo>();
     auto io = io::RestoreH5MDParallel(mpiInfo);
-    io.restore(config.fileRestoreH5MD, subdomain, atoms);
+    io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
+
+    auto subdomain = data::Subdomain(initialSubdomain.minCorner, initialSubdomain.maxCorner, {0_r, initialSubdomain.ghostLayerThickness[1], initialSubdomain.ghostLayerThickness[2]});
     auto molecules = data::createMoleculeForEachAtom(atoms);
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
@@ -191,7 +193,7 @@ void LJ(Config& config)
         dumpThermoForce.open(config.fileOutTF);
         dumpThermoForce.dumpScalarView(thermodynamicForce.getForce().createGrid());
         // microstate
-        dumpH5MD.open(config.fileOutH5md, atoms);
+        dumpH5MD.open(config.fileOutH5md, subdomain, atoms);
     }
 
     for (auto step = 0; step < config.nsteps; ++step)
@@ -356,6 +358,9 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
+    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
+    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
+    app.add_option("--inpfile", config.fileRestoreH5MD, "input file name");
 
     CLI11_PARSE(app, argc, argv);
 
