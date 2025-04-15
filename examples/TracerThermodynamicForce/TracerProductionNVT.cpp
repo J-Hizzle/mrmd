@@ -158,7 +158,7 @@ void LJ(Config& config)
         // density profile
         auto densityGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
-        dumpH5MD.open(config.fileOutH5md, atoms);
+        dumpH5MD.open(config.fileOutH5md, subdomain, atoms);
     }
     for (auto step = 0; step < config.nsteps; ++step)
     {

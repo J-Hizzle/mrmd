@@ -268,6 +268,10 @@ int main(int argc, char* argv[])
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("--xlength", config.Lx, "x length of the box");
+    app.add_option("--ylength", config.Ly, "y length of the box");
+    app.add_option("--zlength", config.Lz, "z length of the box");
+    app.add_option("--numAtoms", config.numAtoms, "number of atoms");
     CLI11_PARSE(app, argc, argv);
     if (config.outputInterval < 0) config.bOutput = false;
     equilibrateBerendsen(config);

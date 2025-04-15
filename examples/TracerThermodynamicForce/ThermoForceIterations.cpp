@@ -122,15 +122,14 @@ struct Config
 void LJ(Config& config)
 {
     // initialize
-    data::Subdomain initialSubdomain;
+    data::Subdomain subdomain;
     auto atoms = data::Atoms(0);
 
     // load data from file
     auto mpiInfo = std::make_shared<data::MPIInfo>();
     auto io = io::RestoreH5MDParallel(mpiInfo);
-    io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
+    io.restore(config.fileRestoreH5MD, subdomain, atoms);
 
-    auto subdomain = data::Subdomain(initialSubdomain.minCorner, initialSubdomain.maxCorner, {0_r, initialSubdomain.ghostLayerThickness[1], initialSubdomain.ghostLayerThickness[2]});
     auto molecules = data::createMoleculeForEachAtom(atoms);
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
@@ -202,11 +201,11 @@ void LJ(Config& config)
         assert(atoms.numGhostAtoms == molecules.numGhostMolecules);
         maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
 
-        // update molecule positions
-        action::UpdateMolecules::update(molecules, atoms, weightingFunction);
-
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
+            // update molecule positions
+            action::UpdateMolecules::update(molecules, atoms, weightingFunction);
+
             // reset displacement
             maxAtomDisplacement = 0_r;
 
