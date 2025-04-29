@@ -354,6 +354,11 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
+    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
+    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter"); 
+    app.add_option("--inpfile", config.fileRestoreH5MD, "input file name");
+    app.add_option("--trelax", config.temperature_relaxation_coefficient,
+                  "temperature relaxation coefficient");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -366,7 +371,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     config.smoothingRange =
         real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
-
+    
     if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
 
