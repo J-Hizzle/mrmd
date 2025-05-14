@@ -235,33 +235,33 @@ void LJ(Config& config)
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
-        if (config.bOutput)
-        {
-            dumpH5MD.close();
-
-            // final microstates output
-            dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
-
-            io::dumpGRO(config.fileOutGro,
-                        atoms,
-                        subdomain,
-                        0,
-                        config.resName,
-                        config.resName,
-                        config.typeNames,
-                        false,
-                        true);
-        }
-        auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
-
-        auto time = timer.seconds();
-        std::cout << time << std::endl;
-
-        std::ofstream fout("ecab.perf", std::ofstream::app);
-        fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-             << std::endl;
-        fout.close();
     }
+    if (config.bOutput)
+    {
+        dumpH5MD.close();
+
+        // final microstates output
+        dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
+
+        io::dumpGRO(config.fileOutGro,
+                    atoms,
+                    subdomain,
+                    0,
+                    config.resName,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
+    }
+    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
+
+    auto time = timer.seconds();
+    std::cout << time << std::endl;
+
+    std::ofstream fout("ecab.perf", std::ofstream::app);
+    fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
+         << std::endl;
+    fout.close();
 }
 
 int main(int argc, char* argv[])  // NOLINT
@@ -283,7 +283,7 @@ int main(int argc, char* argv[])  // NOLINT
     CLI11_PARSE(app, argc, argv);
 
     config.fileRestoreH5MD = fmt::format("{0}_final.h5md", config.fileRestore);
-    config.fileRestoreTF = fmt::format("{0}_tf.txt", config.fileRestore);
+    config.fileRestoreTF = fmt::format("{0}_final_tf.txt", config.fileRestore);
     config.fileOutH5md = fmt::format("{0}.h5md", config.fileOut);
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
