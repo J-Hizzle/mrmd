@@ -347,19 +347,21 @@ int main(int argc, char* argv[])  // NOLINT
     CLI::App app{"AdResS tracer thermodynamic force simulation"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
-    app.add_option("-s,--sampling", config.densitySamplingInterval, "density sampling interval");
-    app.add_option("-u,--update", config.densityUpdateInterval, "density update interval");
+    app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
+
+    app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
+    app.add_option("--update", config.densityUpdateInterval, "density update interval");
     app.add_option("--binwidth", config.densityBinWidth, "density bin width");
     app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
     app.add_option(
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
     app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
     app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
-    app.add_option("--inpfile", config.fileRestoreH5MD, "input file name");
 
     CLI11_PARSE(app, argc, argv);
 

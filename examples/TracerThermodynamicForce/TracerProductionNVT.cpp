@@ -277,8 +277,11 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestore, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
+
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
+    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
+    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -289,6 +292,7 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutFinalH5MD = fmt::format("{0}_final.h5md", config.fileOut);
 
+    if (config.outputInterval < 0) config.bOutput = false;
     LJ(config);
 
     mrmd::finalize();
