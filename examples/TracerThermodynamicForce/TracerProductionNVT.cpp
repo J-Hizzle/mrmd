@@ -91,7 +91,7 @@ struct Config
     bool bOutput = true;
     idx_t outputInterval = 1000;
     std::string fileOut = "tracerProductionNVT";
-    std::string fileOutH5md = fmt::format("{0}.h5md", fileOut);
+    std::string fileOutH5MD = fmt::format("{0}.h5md", fileOut);
     std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
     std::string fileOutFinalH5MD = fmt::format("{0}_final.h5md", fileOut);
@@ -158,8 +158,10 @@ void LJ(Config& config)
         // density profile
         auto densityGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
-        dumpH5MD.open(config.fileOutH5md, subdomain, atoms);
+        dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
+
+    // main integration loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
         assert(atoms.numLocalAtoms == molecules.numLocalMolecules);
@@ -287,7 +289,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     config.fileRestoreH5MD = fmt::format("{0}_final.h5md", config.fileRestore);
     config.fileRestoreTF = fmt::format("{0}_final_tf.txt", config.fileRestore);
-    config.fileOutH5md = fmt::format("{0}.h5md", config.fileOut);
+    config.fileOutH5MD = fmt::format("{0}.h5md", config.fileOut);
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutFinalH5MD = fmt::format("{0}_final.h5md", config.fileOut);

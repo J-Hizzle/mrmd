@@ -111,7 +111,7 @@ struct Config
     bool bOutput = true;
     idx_t outputInterval = densityUpdateInterval;
     std::string fileOut = "thermoForce";
-    std::string fileOutH5md = fmt::format("{0}.h5md", fileOut);
+    std::string fileOutH5MD = fmt::format("{0}.h5md", fileOut);
     std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
     std::string fileOutDens = fmt::format("{0}_dens.txt", fileOut);
@@ -192,7 +192,7 @@ void LJ(Config& config)
         dumpThermoForce.open(config.fileOutTF);
         dumpThermoForce.dumpScalarView(thermodynamicForce.getForce().createGrid());
         // microstate
-        dumpH5MD.open(config.fileOutH5md, subdomain, atoms);
+        dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
 
     for (auto step = 0; step < config.nsteps; ++step)
@@ -365,7 +365,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     CLI11_PARSE(app, argc, argv);
 
-    config.fileOutH5md = fmt::format("{0}.h5md", config.fileOut);
+    config.fileOutH5MD = fmt::format("{0}.h5md", config.fileOut);
     config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
     config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = fmt::format("{0}_dens.txt", config.fileOut);

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
+
 #include <CLI/App.hpp>
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
@@ -39,12 +41,6 @@ using namespace mrmd;
 
 struct Config
 {
-    // output parameters
-    bool bOutput = true;
-    std::string fileOutH5MD = "equilibrateLangevin.h5md";
-    std::string fileOutGro = "equilibrateLangevin.gro";
-    idx_t outputInterval = 1000;
-
     // time parameters
     idx_t nsteps = 100001;
     real_t dt = 0.002;
@@ -77,6 +73,15 @@ struct Config
     real_t skin = 0.3;
     real_t neighborCutoff = rCut + skin;
     idx_t estimatedMaxNeighbors = 60;
+
+    // output parameters
+    bool bOutput = true;
+    idx_t outputInterval = 1000;
+    std::string fileOut = "equilibrateLangevin";
+    std::string fileOutH5MD = fmt::format("{0}.h5md", fileOut);
+    std::string fileOutGro = fmt::format("{0}.gro", fileOut);
+    std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
+    std::string fileOutFinalH5MD = fmt::format("{0}_final.h5md", fileOut);
 };
 
 void equilibrateLangevin(Config& config)
@@ -109,13 +114,15 @@ void equilibrateLangevin(Config& config)
     util::ExponentialMovingAverage currentPressure(config.pressure_averaging_coefficient);
     util::ExponentialMovingAverage currentTemperature(config.temperature_averaging_coefficient);
 
-    // thermodynamic observables table
+    // output management
+    auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
     if (config.bOutput)
     {
         util::printTable(
             "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
         util::printTableSep(
             "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
+        dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
 
     // main integration loop
@@ -186,28 +193,38 @@ void equilibrateLangevin(Config& config)
                              Ek + LJ.getEnergy() / real_c(atoms.numLocalAtoms),
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
+                             
+            // microstate output
+            dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
+
+    if (config.bOutput)
+    {
+        dumpH5MD.close();
+
+        // final microstates output
+        dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
+
+        io::dumpGRO(config.fileOutGro,
+                    atoms,
+                    subdomain,
+                    0,
+                    config.resName,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
+    }
+    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
+
     auto time = timer.seconds();
     std::cout << time << std::endl;
-
-    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
 
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
          << std::endl;
     fout.close();
-
-    dump.dump(config.fileOutH5MD, subdomain, atoms);
-    io::dumpGRO(config.fileOutGro,
-                atoms,
-                subdomain,
-                0,
-                config.resName,
-                config.resName,
-                config.typeNames,
-                false,
-                true);
 }
 
 int main(int argc, char* argv[])
@@ -217,14 +234,22 @@ int main(int argc, char* argv[])
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
     Config config;
-    CLI::App app{"Lennard Jones Fluid benchmark application"};
+    CLI::App app{"NVT equilibration run with Langevin thermostat"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
-    app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("-o,--outint", config.outputInterval, "output interval");
+    app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
+
     CLI11_PARSE(app, argc, argv);
+
+    config.fileOutH5MD = fmt::format("{0}.h5md", config.fileOut);
+    config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
+    config.fileOutTF = fmt::format("{0}_tf.txt", config.fileOut);
+    config.fileOutFinalH5MD = fmt::format("{0}_final.h5md", config.fileOut);
+
     if (config.outputInterval < 0) config.bOutput = false;
     equilibrateLangevin(config);
 
     mrmd::finalize();
-
     return EXIT_SUCCESS;
 }
