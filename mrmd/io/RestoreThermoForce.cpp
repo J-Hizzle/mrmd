@@ -92,6 +92,9 @@ action::ThermodynamicForce restoreThermoForce(
                                                   enforceSymmetry,
                                                   usePeriodicity);
 
+    std::cout << "h_forces extent" << h_forces.extent(0) << std::endl;
+    std::cout << "thermodynamicForce extent" << thermodynamicForce.getForce().data.extent(0) << std::endl;
+
     thermodynamicForce.setForce(d_forces);
 
     return thermodynamicForce;
