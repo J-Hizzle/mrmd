@@ -122,15 +122,32 @@ struct Config
 void LJ(Config& config)
 {
     // initialize
-    data::Subdomain subdomain;
+    data::Subdomain initialSubdomain;
     auto atoms = data::Atoms(0);
 
     // load data from file
     auto mpiInfo = std::make_shared<data::MPIInfo>();
     auto io = io::RestoreH5MDParallel(mpiInfo);
-    io.restore(config.fileRestoreH5MD, subdomain, atoms);
+    io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
 
     auto molecules = data::createMoleculeForEachAtom(atoms);
+
+    // reinitialize subdomain with no ghost layer in x-direction
+    auto subdomain = data::Subdomain({
+        initialSubdomain.minCorner[0],
+        initialSubdomain.minCorner[1],
+        initialSubdomain.minCorner[2],
+    },
+    {
+        initialSubdomain.maxCorner[0],
+        initialSubdomain.maxCorner[1],
+        initialSubdomain.maxCorner[2],
+    },
+    {
+        0_r, 
+        initialSubdomain.ghostLayerThickness[1], 
+        initialSubdomain.ghostLayerThickness[1]
+    });
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
     auto rho = real_c(atoms.numLocalAtoms) / volume;
