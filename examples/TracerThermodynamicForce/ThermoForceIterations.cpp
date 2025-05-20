@@ -48,6 +48,7 @@
 #include "util/PrintTable.hpp"
 #include "util/Random.hpp"
 #include "weighting_function/Slab.hpp"
+#include "io/RestoreThermoForce.hpp"
 
 using namespace mrmd;
 
@@ -59,6 +60,7 @@ struct Config
 
     // input file parameters
     std::string fileRestoreH5MD = "equilibrateLangevin.h5md";
+    std::string fileRestoreTF;
 
     // system parameters
     const std::string resName = "Argon";
@@ -153,6 +155,22 @@ void LJ(Config& config)
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
 
+    std::optional<action::ThermodynamicForce> thermodynamicForceOption;
+
+    if (config.fileRestoreTF.empty())
+    {
+        std::cout << "initializing thermodynamic force" << std::endl;
+        thermodynamicForceOption.emplace(rho, subdomain, config.densityBinWidth,
+                                   config.thermodynamicForceModulation, config.enforceSymmetry);
+    }
+    else
+    {
+        std::cout << "restoring thermodynamic force from file" << std::endl;
+        thermodynamicForceOption.emplace(io::restoreThermoForce(config.fileRestoreTF, subdomain));
+    }
+
+    auto thermodynamicForce = thermodynamicForceOption.value();
+
     // data allocations
     HalfVerletList moleculesVerletList;
     idx_t verletlistRebuildCounter = 0;
@@ -181,11 +199,6 @@ void LJ(Config& config)
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
-    action::ThermodynamicForce thermodynamicForce(rho,
-                                                  subdomain,
-                                                  config.densityBinWidth,
-                                                  config.thermodynamicForceModulation,
-                                                  config.enforceSymmetry);
     action::LangevinThermostat langevinThermostat(
         config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
     communication::MultiResGhostLayer ghostLayer;
@@ -367,6 +380,7 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
+    app.add_option("--forceguess", config.fileRestoreTF, "initial guess for the thermodynamics force");
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
     app.add_option("--binwidth", config.densityBinWidth, "density bin width");
