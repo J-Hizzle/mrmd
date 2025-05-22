@@ -376,6 +376,7 @@ int main(int argc, char* argv[])  // NOLINT
     Config config;
     CLI::App app{"AdResS tracer thermodynamic force simulation"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
+    app.add_option("-d,--tstep", config.dt, "time step");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
