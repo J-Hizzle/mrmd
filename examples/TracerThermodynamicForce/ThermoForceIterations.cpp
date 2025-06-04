@@ -166,7 +166,9 @@ void LJ(Config& config)
     else
     {
         std::cout << "restoring thermodynamic force from file" << std::endl;
-        thermodynamicForceOption.emplace(io::restoreThermoForce(config.fileRestoreTF, subdomain));
+        thermodynamicForceOption.emplace(io::restoreThermoForce(config.fileRestoreTF, subdomain, {rho}, 
+                                                   {config.thermodynamicForceModulation},
+                                                   config.enforceSymmetry));
     }
 
     auto thermodynamicForce = thermodynamicForceOption.value();
