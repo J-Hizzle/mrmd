@@ -14,6 +14,7 @@
 
 #include "RestoreThermoForce.hpp"
 
+#include <filesystem>
 #include <fstream>
 
 namespace mrmd
@@ -21,64 +22,72 @@ namespace mrmd
 namespace io
 {
 action::ThermodynamicForce restoreThermoForce(
-    const std::string& filename,
+    const std::string& filenameForce,
     const data::Subdomain& subdomain,
     const std::vector<real_t>& targetDensities,
     const std::vector<real_t>& thermodynamicForceModulations,
     const bool enforceSymmetry,
     const bool usePeriodicity,
-    const idx_t maxNumForces)
+    const idx_t maxNumForces,
+    const idx_t& requestedDensityBinNumber)
 {
     std::string line;
     std::string word;
-    int binNum = 0;
-    int histNum = 0;
-    real_t grid0 = 0;
-    real_t grid1 = 0;
+    int binNumForce = 0;
+    int histNumForce = 0;
 
-    std::ifstream fileThermoForce(filename);
+    MRMD_HOST_ASSERT_EQUAL(std::filesystem::exists(filenameForce),
+                           true,
+                           "Thermodynamic force input file does not exist.");
+
+    // Read the thermodynamic force file
+    std::ifstream fileThermoForce(filenameForce);
     std::getline(fileThermoForce, line);
     std::stringstream gridLineStream(line);
     while (gridLineStream >> word)
     {
-        if (binNum == 0)
-        {
-            grid0 = std::stod(word);
-        }
-        if (binNum == 1)
-        {
-            grid1 = std::stod(word);
-        }
-        binNum++;
+        binNumForce++;
     }
-    MRMD_HOST_ASSERT_GREATER(binNum, 1);
-    real_t binWidth = grid1 - grid0;
+    MRMD_HOST_ASSERT_GREATER(binNumForce, 1);
 
-    MultiView::HostMirror h_forcesRead("h_forcesRead", binNum, maxNumForces);
+    MultiView::HostMirror h_forcesRead("h_forcesRead", binNumForce, maxNumForces);
 
     while (std::getline(fileThermoForce, line))
     {
-        binNum = 0;
+        binNumForce = 0;
         std::stringstream forceLineStream(line);
         while (forceLineStream >> word)
         {
-            h_forcesRead(binNum, histNum) = std::stod(word);
-            binNum++;
+            h_forcesRead(binNumForce, histNumForce) = std::stod(word);
+            binNumForce++;
         }
-        histNum++;
+        histNumForce++;
 
-        MRMD_HOST_ASSERT_LESSEQUAL(histNum, maxNumForces);
+        MRMD_HOST_ASSERT_LESSEQUAL(histNumForce, maxNumForces);
     }
     fileThermoForce.close();
 
-    auto h_forces =
-        Kokkos::subview(h_forcesRead, Kokkos::make_pair(0, binNum), Kokkos::make_pair(0, histNum));
-    MultiView d_forces("d_forces", binNum, histNum);
+    auto h_forces = Kokkos::subview(
+        h_forcesRead, Kokkos::make_pair(0, binNumForce), Kokkos::make_pair(0, histNumForce));
+    MultiView d_forces("d_forces", binNumForce, histNumForce);
     Kokkos::deep_copy(d_forces, h_forces);
+
+    auto forceBinNumber = idx_c(binNumForce);
+    idx_t densityBinNumber;
+
+    if (requestedDensityBinNumber == -1)
+    {
+        densityBinNumber = forceBinNumber;
+    }
+    else
+    {
+        densityBinNumber = requestedDensityBinNumber;
+    }
 
     action::ThermodynamicForce thermodynamicForce(targetDensities,
                                                   subdomain,
-                                                  binWidth,
+                                                  forceBinNumber,
+                                                  densityBinNumber,
                                                   thermodynamicForceModulations,
                                                   enforceSymmetry,
                                                   usePeriodicity);

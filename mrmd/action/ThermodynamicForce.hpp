@@ -69,17 +69,33 @@ public:
 
     ThermodynamicForce(const std::vector<real_t>& targetDensity,
                        const data::Subdomain& subdomain,
+                       const real_t& requestedForceBinWidth,
                        const real_t& requestedDensityBinWidth,
+                       const std::vector<real_t>& thermodynamicForceModulation,
+                       const bool enforceSymmetry = false,
+                       const bool usePeriodicity = false);
+
+    ThermodynamicForce(const std::vector<real_t>& targetDensity,
+                       const data::Subdomain& subdomain,
+                       const real_t& requestedForceBinWidth,
                        const std::vector<real_t>& thermodynamicForceModulation,
                        const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 
     ThermodynamicForce(const real_t targetDensity,
                        const data::Subdomain& subdomain,
-                       const real_t& requestedDensityBinWidth,
+                       const real_t& requestedForceBinWidth,
                        const real_t thermodynamicForceModulation,
                        const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
+
+    ThermodynamicForce(const std::vector<real_t>& targetDensity,
+                       const data::Subdomain& subdomain,
+                       const idx_t& requestedForceBinNumber,
+                       const idx_t& requestedDensityBinNumber,
+                       const std::vector<real_t>& thermodynamicForceModulation,
+                       const bool enforceSymmetry,
+                       const bool usePeriodicity);
 };
 }  // namespace action
 }  // namespace mrmd
