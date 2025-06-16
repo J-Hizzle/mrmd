@@ -30,6 +30,13 @@ add_executable(ThermoForceIterations
 target_link_libraries(ThermoForceIterations
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
+add_executable(ThermoForceIterationsBAOAB
+        ThermoForceIterationsBAOAB.cpp
+        )
+target_link_libraries(ThermoForceIterationsBAOAB
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
+        )
+
 add_executable(TracerProductionNVT
         TracerProductionNVT.cpp
         )
