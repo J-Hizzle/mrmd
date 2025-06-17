@@ -16,6 +16,7 @@
 
 #include "analysis/AxialDensityProfile.hpp"
 #include "util/math.hpp"
+#include "util/interpolation.hpp"
 
 namespace mrmd
 {
@@ -63,6 +64,9 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
         hForceFactor(i) = thermodynamicForceModulation_[i] / targetDensity_[i];
     }
     Kokkos::deep_copy(forceFactor_, hForceFactor);
+
+    std::cout << "forcebinwidth: " << requestedForceBinWidth << std::endl;
+    std::cout << "densbinwidth: " << requestedDensityBinWidth << std::endl;
 }
 
 ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
@@ -165,12 +169,14 @@ void ThermodynamicForce::update(const real_t& smoothingSigma, const real_t& smoo
     auto smoothedDensityGradient = data::gradient(smoothedDensityProfile, usePeriodicity_);
     smoothedDensityGradient.scale(forceFactor_);
 
-    force_ -= smoothedDensityGradient;
+    force_ -= util::interpolate(smoothedDensityGradient, force_.createGrid());
 
     // reset sampling data
     Kokkos::deep_copy(densityProfile_.data, 0_r);
     densityProfileSamples_ = 0;
 }
+
+
 
 void ThermodynamicForce::apply(const data::Atoms& atoms) const
 {
