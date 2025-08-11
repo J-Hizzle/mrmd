@@ -44,7 +44,7 @@ idx_t findRightBin(const ScalarView& grid, const real_t& value);
  * @return MultiHistogram with interpolated values
  */
 data::MultiHistogram interpolate(const data::MultiHistogram& input,
-                                 const ScalarView::HostMirror& grid);
+                                 const ScalarView& grid);
 
 }  // namespace util
 }  // namespace mrmd

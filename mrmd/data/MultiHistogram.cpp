@@ -33,6 +33,21 @@ ScalarView::HostMirror MultiHistogram::createGrid() const
     return grid;
 }
 
+ScalarView MultiHistogram::createGrid_d() const
+{
+    ScalarView grid("grid", numBins);
+    auto policy =
+        Kokkos::RangePolicy<>(0, numBins);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
+        grid[idx] = getBinPosition(idx);
+    };
+    Kokkos::parallel_for("MultiHistogram::scale", policy, kernel);
+    Kokkos::fence();
+
+    return grid;
+}
+
 MultiHistogram& MultiHistogram::operator+=(const MultiHistogram& rhs)
 {
     transform(*this, rhs, *this, bin_op::Add());
