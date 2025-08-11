@@ -27,6 +27,7 @@ action::ThermodynamicForce restoreThermoForce(
     const std::vector<real_t>& thermodynamicForceModulations = {1_r},
     const bool enforceSymmetry = false,
     const bool usePeriodicity = false,
-    const idx_t maxNumForces = 10);
+    const idx_t maxNumForces = 10,
+    const idx_t& requestedDensityBinNumber = -1);
 }  // namespace io
 }  // namespace mrmd
