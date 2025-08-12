@@ -30,8 +30,7 @@ idx_t findRightBin(const ScalarView& grid, const real_t& value)
     return idx;
 }
 
-data::MultiHistogram interpolate(const data::MultiHistogram& input,
-                                 const ScalarView& grid)
+data::MultiHistogram interpolate(const data::MultiHistogram& input, const ScalarView& grid)
 {
     data::MultiHistogram output(
         "interpolated-profile", input.min, input.max, grid.extent(0), input.numHistograms);
