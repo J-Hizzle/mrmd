@@ -42,9 +42,9 @@ TEST(MultiHistogram, consistencyBinToPosition)
     MultiHistogram histogram("histogram", 0_r, 10_r, 10, 2);
 
     for (idx_t idx = 0; idx < histogram.numBins; ++idx)
-    {
-        EXPECT_FLOAT_EQ(histogram.getBin(histogram.getBinPosition(idx)), idx);
-    }
+        {
+            EXPECT_FLOAT_EQ(histogram.getBin(histogram.getBinPosition(idx)), idx);
+        } 
 }
 
 TEST(MultiHistogram, scale)

@@ -30,6 +30,19 @@ add_executable(ThermoForceIterations
 target_link_libraries(ThermoForceIterations
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
+add_executable(tfNaive
+        tfNaive.cpp
+        )
+target_link_libraries(tfNaive
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
+        )
+add_executable(tfGuess
+        tfGuess.cpp
+        )
+target_link_libraries(tfGuess
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
+        )
+
 add_executable(ThermoForceIterationsBAOAB
         ThermoForceIterationsBAOAB.cpp
         )
