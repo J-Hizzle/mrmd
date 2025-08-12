@@ -86,6 +86,7 @@ TEST(MultiHistogram, createGridConsistency)
     auto grid = histogram.createGrid();
     auto d_grid = histogram.createGrid_d();
     auto h_grid = Kokkos::create_mirror_view(d_grid);
+    Kokkos::deep_copy(h_grid, d_grid);
 
     for (idx_t i = 0; i < histogram.numBins; ++i)
     {
