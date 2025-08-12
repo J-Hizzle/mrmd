@@ -18,18 +18,6 @@ namespace mrmd
 {
 namespace util
 {
-real_t lerp(const real_t& left, const real_t& right, const real_t& factor)
-{
-    return left + (right - left) * factor;
-}
-
-idx_t findRightBin(const ScalarView& grid, const real_t& value)
-{
-    idx_t idx = 0;
-    for (; idx < idx_c(grid.extent(0)) && grid(idx) < value; ++idx);
-    return idx;
-}
-
 data::MultiHistogram interpolate(const data::MultiHistogram& input, const ScalarView& grid)
 {
     data::MultiHistogram output(

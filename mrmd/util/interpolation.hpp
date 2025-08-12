@@ -27,7 +27,11 @@ namespace util
  * @param factor interpolation factor in [0, 1]
  * @return interpolated value
  */
-real_t lerp(const real_t& left, const real_t& right, const real_t& factor);
+KOKKOS_INLINE_FUNCTION
+real_t lerp(const real_t& left, const real_t& right, const real_t& factor)
+{
+    return left + (right - left) * factor;
+}
 
 /**
  * Find the index of the first bin in the grid that is greater than or equal to the value.
@@ -35,7 +39,13 @@ real_t lerp(const real_t& left, const real_t& right, const real_t& factor);
  * @param value value to find
  * @return index of the right bin
  */
-idx_t findRightBin(const ScalarView& grid, const real_t& value);
+KOKKOS_INLINE_FUNCTION
+idx_t findRightBin(const ScalarView& grid, const real_t& value)
+{
+    idx_t idx = 0;
+    for (; idx < idx_c(grid.extent(0)) && grid(idx) < value; ++idx);
+    return idx;
+}
 
 /**
  * Interpolate data values of MultiHistogram to a new grid.
