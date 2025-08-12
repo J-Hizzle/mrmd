@@ -43,7 +43,11 @@ KOKKOS_INLINE_FUNCTION
 idx_t findRightBin(const ScalarView& grid, const real_t& value)
 {
     idx_t idx = 0;
-    for (; idx < idx_c(grid.extent(0)) && grid(idx) < value; ++idx);
+    for (; idx < idx_c(grid.extent(0)) && grid(idx) < value; ++idx)
+    {
+        // empty loop body
+    }
+
     return idx;
 }
 

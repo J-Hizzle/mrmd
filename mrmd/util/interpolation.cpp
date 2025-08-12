@@ -31,9 +31,18 @@ data::MultiHistogram interpolate(const data::MultiHistogram& input, const Scalar
         // find the two enclosing bins in the input histogram
         auto rightBin = findRightBin(inputGrid, grid(binIdx));
         auto leftBin = rightBin - 1;
+
+        auto inputDataLeft = input.data(leftBin, histogramIdx);
+        auto inputDataRight = input.data(rightBin, histogramIdx);
+
+        if (leftBin < 0)
+        {
+            output.data(binIdx, histogramIdx) = 0.0_r;  // out of bounds, set to zero
+            return;
+        }
         output.data(binIdx, histogramIdx) =
-            lerp(input.data(leftBin, histogramIdx),
-                 input.data(rightBin, histogramIdx),
+            lerp(inputDataLeft,
+                 inputDataRight,
                  (grid(binIdx) - inputGrid(leftBin)) * input.inverseBinSize);
     };
     Kokkos::parallel_for("MultiHistogram::interpolate", policy, kernel);

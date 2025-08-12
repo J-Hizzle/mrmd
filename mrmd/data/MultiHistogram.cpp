@@ -35,6 +35,8 @@ ScalarView::HostMirror MultiHistogram::createGrid() const
 
 ScalarView MultiHistogram::createGrid_d() const
 {
+    MRMD_HOST_CHECK_GREATEREQUAL(numBins, 0);
+    
     ScalarView grid("grid", numBins);
     const real_t min_ = min;
     const real_t binSize_ = binSize;
