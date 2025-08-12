@@ -102,7 +102,9 @@ void compareSystems(const data::Subdomain& subdomain1,
                     const data::Subdomain& subdomain2,
                     const data::Atoms& atoms2)
 {
-    EXPECT_FLOAT_EQ(subdomain1.ghostLayerThickness, subdomain2.ghostLayerThickness);
+    EXPECT_FLOAT_EQ(subdomain1.ghostLayerThickness[0], subdomain2.ghostLayerThickness[0]);
+    EXPECT_FLOAT_EQ(subdomain1.ghostLayerThickness[1], subdomain2.ghostLayerThickness[1]);
+    EXPECT_FLOAT_EQ(subdomain1.ghostLayerThickness[2], subdomain2.ghostLayerThickness[2]);
 
     EXPECT_FLOAT_EQ(subdomain1.minCorner[0], subdomain2.minCorner[0]);
     EXPECT_FLOAT_EQ(subdomain1.minCorner[1], subdomain2.minCorner[1]);
