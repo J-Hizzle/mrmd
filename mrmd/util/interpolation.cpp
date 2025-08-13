@@ -18,18 +18,6 @@ namespace mrmd
 {
 namespace util
 {
-real_t lerp(const real_t& left, const real_t& right, const real_t& factor)
-{
-    return left + (right - left) * factor;
-}
-
-idx_t findRightBin(const ScalarView& grid, const real_t& value)
-{
-    idx_t idx = 0;
-    for (; idx < idx_c(grid.extent(0)) && grid(idx) < value; ++idx);
-    return idx;
-}
-
 data::MultiHistogram interpolate(const data::MultiHistogram& input, const ScalarView& grid)
 {
     data::MultiHistogram output(
@@ -43,9 +31,20 @@ data::MultiHistogram interpolate(const data::MultiHistogram& input, const Scalar
         // find the two enclosing bins in the input histogram
         auto rightBin = findRightBin(inputGrid, grid(binIdx));
         auto leftBin = rightBin - 1;
+
+        // handle boundaries
+        if (leftBin < 0 || rightBin >= input.numBins)
+        {
+            output.data(binIdx, histogramIdx) = 0.0_r;  // out of bounds, set to zero
+            return;
+        }
+
+        auto inputDataLeft = input.data(leftBin, histogramIdx);
+        auto inputDataRight = input.data(rightBin, histogramIdx);
+
         output.data(binIdx, histogramIdx) =
-            lerp(input.data(leftBin, histogramIdx),
-                 input.data(rightBin, histogramIdx),
+            lerp(inputDataLeft,
+                 inputDataRight,
                  (grid(binIdx) - inputGrid(leftBin)) * input.inverseBinSize);
     };
     Kokkos::parallel_for("MultiHistogram::interpolate", policy, kernel);
