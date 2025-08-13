@@ -71,7 +71,6 @@ public:
             return;
         }
 
-        idx_t binAlpha = -1;
         const real_t gradLambdaAlpha[3] = {moleculesGradLambda_(alpha, 0),
                                            moleculesGradLambda_(alpha, 1),
                                            moleculesGradLambda_(alpha, 2)};

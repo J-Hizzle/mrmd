@@ -24,11 +24,10 @@
 
 #include "action/ContributeMoleculeForceToAtoms.hpp"
 #include "action/LJ_IdealGas_FAdResS.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/ThermodynamicForce.hpp"
 #include "action/UpdateMolecules.hpp"
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/SystemMomentum.hpp"
 #include "communication/MultiResGhostLayer.hpp"
@@ -184,8 +183,8 @@ void LJ(Config& config)
 
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
-    action::LangevinThermostat langevinThermostat(
-        config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
+    action::VelocityVerletLangevinThermostat integrator(
+        config.temperature_relaxation_coefficient, config.target_temperature);
     communication::MultiResGhostLayer ghostLayer;
 
     // output management
@@ -214,7 +213,7 @@ void LJ(Config& config)
     {
         assert(atoms.numLocalAtoms == molecules.numLocalMolecules);
         assert(atoms.numGhostAtoms == molecules.numGhostMolecules);
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
@@ -279,13 +278,9 @@ void LJ(Config& config)
         thermodynamicForce.apply(atoms, applicationRegion);
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
 
-        if (config.target_temperature >= 0)
-        {
-            langevinThermostat.apply(atoms);
-        }
         ghostLayer.contributeBackGhostToReal(atoms);
 
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        integrator.postForceIntegrate(atoms, config.dt);
 
         if (config.bOutput && (step % config.outputInterval == 0))
         {
