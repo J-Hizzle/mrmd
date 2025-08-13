@@ -32,14 +32,16 @@ data::MultiHistogram interpolate(const data::MultiHistogram& input, const Scalar
         auto rightBin = findRightBin(inputGrid, grid(binIdx));
         auto leftBin = rightBin - 1;
 
-        auto inputDataLeft = input.data(leftBin, histogramIdx);
-        auto inputDataRight = input.data(rightBin, histogramIdx);
-
-        if (leftBin < 0)
+        // handle boundaries
+        if (leftBin < 0 || rightBin >= input.numBins)
         {
             output.data(binIdx, histogramIdx) = 0.0_r;  // out of bounds, set to zero
             return;
         }
+
+        auto inputDataLeft = input.data(leftBin, histogramIdx);
+        auto inputDataRight = input.data(rightBin, histogramIdx);
+
         output.data(binIdx, histogramIdx) =
             lerp(inputDataLeft,
                  inputDataRight,
