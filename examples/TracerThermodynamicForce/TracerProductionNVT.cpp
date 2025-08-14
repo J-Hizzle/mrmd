@@ -19,9 +19,8 @@
 #include <CLI/Formatter.hpp>
 
 #include "action/LJ_IdealGas_FAdResS.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/UpdateMolecules.hpp"
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/SystemMomentum.hpp"
 #include "communication/MultiResGhostLayer.hpp"
@@ -37,6 +36,7 @@
 #include "io/RestoreThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/PrintTable.hpp"
+#include "util/ApplicationRegion.hpp"
 
 using namespace mrmd;
 
@@ -141,10 +141,16 @@ void LJ(Config& config)
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
 
+    std::tuple<real_t, idx_t, idx_t> integratorResult;
+    real_t fluxBoundaryLeft = boxCenterX - 0.5_r * config.atomisticRegionDiameter;
+    real_t fluxBoundaryRight = boxCenterX + 0.5_r * config.atomisticRegionDiameter;
+    idx_t fluxLeft = 0;
+    idx_t fluxRight = 0;
+
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
-    action::LangevinThermostat langevinThermostat(
-        config.temperature_relaxation_coefficient, config.target_temperature, config.dt);
+    action::VelocityVerletLangevinThermostat integrator(
+        config.temperature_relaxation_coefficient, config.target_temperature);
     communication::MultiResGhostLayer ghostLayer;
 
     // output management
@@ -152,9 +158,9 @@ void LJ(Config& config)
     if (config.bOutput)
     {
         util::printTable(
-            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "flux left", "flux right", "Nlocal", "Nghost");
         util::printTableSep(
-            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "flux left", "flux right", "Nlocal", "Nghost");
         // density profile
         auto densityGrid = Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), thermodynamicForce.getDensityProfile().createGrid());
@@ -166,7 +172,10 @@ void LJ(Config& config)
     {
         assert(atoms.numLocalAtoms == molecules.numLocalMolecules);
         assert(atoms.numGhostAtoms == molecules.numGhostMolecules);
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        integratorResult = integrator.preForceIntegrate(atoms, config.dt, fluxBoundaryLeft, fluxBoundaryRight);
+        maxAtomDisplacement += std::get<0>(integratorResult);
+        fluxLeft += std::get<1>(integratorResult);
+        fluxRight += std::get<2>(integratorResult);
 
         // update molecule positions
         action::UpdateMolecules::update(molecules, atoms, weightingFunction);
@@ -204,13 +213,9 @@ void LJ(Config& config)
         thermodynamicForce.apply(atoms, applicationRegion);
         auto E0 = LJ.run(molecules, moleculesVerletList, atoms);
 
-        if (config.target_temperature >= 0)
-        {
-            langevinThermostat.apply(atoms);
-        }
         ghostLayer.contributeBackGhostToReal(atoms);
 
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        integrator.postForceIntegrate(atoms, config.dt);
 
         if (config.bOutput && (step % config.outputInterval == 0))
         {
@@ -231,8 +236,14 @@ void LJ(Config& config)
                              E0 + Ek,
                              muLeft,
                              muRight,
+                             fluxLeft,
+                             fluxRight,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
+
+            // reset flux counters 
+            fluxLeft = 0;
+            fluxRight = 0;
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
