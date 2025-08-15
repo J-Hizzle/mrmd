@@ -93,17 +93,15 @@ struct Config
     real_t atomisticRegionDiameter = 6_r;
     real_t hybridRegionDiameter = 2.5_r;
 
+    // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 1000000;
-
     real_t densityBinWidth = 0.125_r;
     real_t forceBinWidth = densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
     real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
-
-    // thermodynamic force parameters
     real_t thermodynamicForceModulation = 2_r;
     real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
     real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter;
@@ -186,6 +184,12 @@ void LJ(Config& config)
                                                      config.applicationRegionMin,
                                                      config.applicationRegionMax);
 
+    std::tuple<real_t, idx_t, idx_t> integratorResult;
+    real_t fluxBoundaryLeft = boxCenterX - 0.5_r * config.atomisticRegionDiameter;
+    real_t fluxBoundaryRight = boxCenterX + 0.5_r * config.atomisticRegionDiameter;
+    idx_t fluxLeft = 0;
+    idx_t fluxRight = 0;
+
     // actions
     action::LJ_IdealGas LJ(config.rCap, config.rCut, config.sigma, config.epsilon, config.doShift);
     action::VelocityVerletLangevinThermostat integrator(
@@ -201,9 +205,9 @@ void LJ(Config& config)
     if (config.bOutput)
     {
         util::printTable(
-            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "flux left", "flux right", "Nlocal", "Nghost");
         util::printTableSep(
-            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "Nlocal", "Nghost");
+            "step", "time", "T", "Ek", "E0", "E", "mu_left", "mu_right", "flux left", "flux right", "Nlocal", "Nghost");
         // density profile
         dumpDens.open(config.fileOutDens);
         dumpDens.dumpScalarView(thermodynamicForce.getDensityProfile().createGrid());
@@ -218,7 +222,10 @@ void LJ(Config& config)
     {
         assert(atoms.numLocalAtoms == molecules.numLocalMolecules);
         assert(atoms.numGhostAtoms == molecules.numGhostMolecules);
-        maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
+        integratorResult = integrator.preForceIntegrate(atoms, config.dt, fluxBoundaryLeft, fluxBoundaryRight);
+        maxAtomDisplacement += std::get<0>(integratorResult);
+        fluxLeft += std::get<1>(integratorResult);
+        fluxRight += std::get<2>(integratorResult);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
@@ -306,8 +313,13 @@ void LJ(Config& config)
                              E0 + Ek,
                              muLeft,
                              muRight,
+                             fluxLeft,
+                             fluxRight,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
+            // reset flux counters 
+            fluxLeft = 0;
+            fluxRight = 0;
 
             // thermodynamic force output
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
