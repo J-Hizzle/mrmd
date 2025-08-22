@@ -41,7 +41,7 @@ using namespace mrmd;
 struct Config
 {
     // time parameters
-    idx_t nsteps = 100001;
+    idx_t nsteps = 40000001;
     real_t dt = 0.002;
 
     // input file parameters
@@ -58,20 +58,20 @@ struct Config
     real_t rCap = 0.0_r;
     bool doShift = true;
 
+    // neighborlist parameters
+    real_t skin = 0.3_r;
+    real_t neighborCutoff = rCut + skin;
+    real_t cell_ratio = 0.5_r;
+    idx_t estimatedMaxNeighbors = 60;
+
     // pressure parameters
     real_t pressure_averaging_coefficient = 0.02;
 
     // thermostatting parameters
     real_t target_temperature = 1.5_r;
-    real_t temperature_relaxation_coefficient = 1.0_r;
+    real_t temperature_relaxation_coefficient = 20.0_r;
     real_t temperature_averaging_coefficient = 0.2_r;
     idx_t thermostat_interval = 1;
-
-    // neighbor-list parameters
-    real_t cell_ratio = 1.0_r;
-    real_t skin = 0.3;
-    real_t neighborCutoff = rCut + skin;
-    idx_t estimatedMaxNeighbors = 60;
 
     // flux counting parameters
     real_t flux_boundary_offset = 10.0_r;
@@ -79,7 +79,7 @@ struct Config
     // output parameters
     bool bOutput = true;
     idx_t outputInterval = 1000;
-    std::string fileOut = "equilibrateLangevin";
+    std::string fileOut = "atomisticProductionNVT";
     std::string fileOutH5MD = fmt::format("{0}.h5md", fileOut);
     std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     std::string fileOutTF = fmt::format("{0}_tf.txt", fileOut);
