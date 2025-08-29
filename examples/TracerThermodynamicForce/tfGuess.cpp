@@ -96,7 +96,7 @@ struct Config
     // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 1000000;
-    real_t densityBinWidth = 0.125_r;
+    real_t densityBinWidth = -1_r;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
@@ -157,8 +157,8 @@ void LJ(Config& config)
                                                 {config.thermodynamicForceModulation},
                                                 config.enforceSymmetry,
                                                 false,
-                                                10,
-                                                idx_c(std::ceil(subdomain.diameter[0] / config.densityBinWidth)));
+                                                1,
+                                                config.densityBinWidth);
 
     // data allocations
     HalfVerletList moleculesVerletList;
