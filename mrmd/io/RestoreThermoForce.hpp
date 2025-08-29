@@ -28,6 +28,6 @@ action::ThermodynamicForce restoreThermoForce(
     const bool enforceSymmetry = false,
     const bool usePeriodicity = false,
     const idx_t maxNumForces = 10,
-    const idx_t& requestedDensityBinNumber = -1);
+    const real_t requestedDensityBinWidth = -1_r);
 }  // namespace io
 }  // namespace mrmd

@@ -29,7 +29,7 @@ action::ThermodynamicForce restoreThermoForce(
     const bool enforceSymmetry,
     const bool usePeriodicity,
     const idx_t maxNumForces,
-    const idx_t& requestedDensityBinNumber)
+    const real_t requestedDensityBinWidth)
 {
     std::string line;
     std::string word;
@@ -73,21 +73,17 @@ action::ThermodynamicForce restoreThermoForce(
     Kokkos::deep_copy(d_forces, h_forces);
 
     auto forceBinNumber = idx_c(binNumForce);
-    idx_t densityBinNumber;
+    real_t densityBinWidth = requestedDensityBinWidth;
 
-    if (requestedDensityBinNumber == -1)
+    if (requestedDensityBinWidth < 0_r)
     {
-        densityBinNumber = forceBinNumber;
-    }
-    else
-    {
-        densityBinNumber = requestedDensityBinNumber;
+        densityBinWidth = (subdomain.diameter[0] / real_c(forceBinNumber));
     }
 
     action::ThermodynamicForce thermodynamicForce(targetDensities,
                                                   subdomain,
                                                   forceBinNumber,
-                                                  densityBinNumber,
+                                                  densityBinWidth,
                                                   thermodynamicForceModulations,
                                                   enforceSymmetry,
                                                   usePeriodicity);
