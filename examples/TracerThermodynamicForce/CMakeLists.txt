@@ -16,7 +16,7 @@ add_executable(eqNVTBerendsen
         eqNVTBerendsen.cpp
         )
 target_link_libraries(eqNVTBerendsen
-        PRIVATE mrmd CLI11::CLI11
+        PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
 add_executable(eqNVTLangevin
         eqNVTLangevin.cpp

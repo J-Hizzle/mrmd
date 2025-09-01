@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
+
 #include <CLI/App.hpp>
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
@@ -40,8 +42,9 @@ struct Config
 {
     // output parameters
     bool bOutput = true;
-    std::string fileOutH5MD = "equilibrateBerendsen.h5md";
-    std::string fileOutGro = "equilibrateBerendsen.gro";
+    std::string fileOut = "equilibrateBerendsen";
+    std::string fileOutH5MD = fmt::format("{0}.h5md", fileOut);
+    std::string fileOutGro = fmt::format("{0}.gro", fileOut);
     idx_t outputInterval = 1000;
 
     // time parameters
@@ -272,8 +275,15 @@ int main(int argc, char* argv[])
     app.add_option("--ylength", config.Ly, "y length of the box");
     app.add_option("--zlength", config.Lz, "z length of the box");
     app.add_option("--numAtoms", config.numAtoms, "number of atoms");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
+    
     CLI11_PARSE(app, argc, argv);
+
+    config.fileOutH5MD = fmt::format("{0}.h5md", config.fileOut);
+    config.fileOutGro = fmt::format("{0}.gro", config.fileOut);
+
     if (config.outputInterval < 0) config.bOutput = false;
+
     equilibrateBerendsen(config);
 
     mrmd::finalize();
