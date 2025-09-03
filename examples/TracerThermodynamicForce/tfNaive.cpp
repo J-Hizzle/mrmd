@@ -95,7 +95,7 @@ struct Config
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 1000000;
     real_t densityBinWidth = 0.125_r;
-    real_t densityGridSpacing = densityBinWidth;
+    real_t forceBinWidth = densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
@@ -152,7 +152,7 @@ void LJ(Config& config)
     std::cout << "rho: " << rho << std::endl;
 
     std::cout << "initializing thermodynamic force" << std::endl;
-    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.densityGridSpacing, config.densityBinWidth,
+    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.forceBinWidth, config.densityBinWidth,
                                    {config.thermodynamicForceModulation}, config.enforceSymmetry, false);
 
     // data allocations
@@ -377,7 +377,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
-    app.add_option("--densityGridSpacing", config.densityGridSpacing, "thermodynamic force bin width");
+    app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
     app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
     app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
