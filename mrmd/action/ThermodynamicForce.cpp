@@ -15,6 +15,7 @@
 #include "ThermodynamicForce.hpp"
 
 #include "analysis/AxialDensityProfile.hpp"
+#include "util/interpolation.hpp"
 #include "util/math.hpp"
 
 namespace mrmd
@@ -24,7 +25,7 @@ namespace action
 
 ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
+                                       const real_t& requestedForceBinWidth,
                                        const real_t& requestedDensityBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulations,
                                        const bool enforceSymmetry,
@@ -32,26 +33,25 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensitie
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
              subdomain.maxCorner[0],
-             idx_c(std::ceil(subdomain.diameter[0] / requestedDensityGridSpacing)),
+             idx_c(std::ceil(subdomain.diameter[0] / requestedForceBinWidth)),
              idx_c(targetDensities.size())),
       densityProfile_("density-profile",
                       subdomain.minCorner[0],
                       subdomain.maxCorner[0],
-                      idx_c(std::ceil(subdomain.diameter[0] / requestedDensityGridSpacing)),
+                      idx_c(std::ceil(subdomain.diameter[0] / requestedDensityBinWidth)),
                       idx_c(targetDensities.size())),
       binVolume_(subdomain.diameter[1] * subdomain.diameter[2] * densityProfile_.binSize),
       targetDensities_(targetDensities),
-      densityBinWidth_(requestedDensityBinWidth),
       thermodynamicForceModulations_(thermodynamicForceModulations),
       forceFactor_("force-factor", targetDensities.size()),
       enforceSymmetry_(enforceSymmetry),
       usePeriodicity_(usePeriodicity)
 {
     MRMD_HOST_CHECK_LESSEQUAL(force_.binSize,
-                              requestedDensityGridSpacing,
+                              requestedForceBinWidth,
                               "requested thermodynamic force bin size is not achieved");
     MRMD_HOST_CHECK_LESSEQUAL(densityProfile_.binSize,
-                              requestedDensityGridSpacing,
+                              requestedDensityBinWidth,
                               "requested density profile bin size is not achieved");
 
     MRMD_HOST_CHECK_EQUAL(targetDensities.size(), thermodynamicForceModulations.size());
@@ -65,36 +65,36 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensitie
     }
     Kokkos::deep_copy(forceFactor_, hForceFactor);
 
-    std::cout << "densGridSpacing: " << requestedDensityGridSpacing << std::endl;
-    std::cout << "densBinWidth: " << requestedDensityBinWidth << std::endl;
+    std::cout << "forcebinwidth: " << requestedForceBinWidth << std::endl;
+    std::cout << "densbinwidth: " << requestedDensityBinWidth << std::endl;
 }
 
 ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
+                                       const real_t& requestedForceBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulations,
                                        const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : ThermodynamicForce(targetDensities,
                          subdomain,
-                         requestedDensityGridSpacing,
-                         requestedDensityGridSpacing,
+                         requestedForceBinWidth,
+                         requestedForceBinWidth,
                          thermodynamicForceModulations,
                          enforceSymmetry,
                          usePeriodicity)
 {
 }
 
-ThermodynamicForce::ThermodynamicForce(const real_t& targetDensity,
+ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
-                                       const real_t& thermodynamicForceModulation,
+                                       const real_t& requestedForceBinWidth,
+                                       const real_t thermodynamicForceModulation,
                                        const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : ThermodynamicForce({targetDensity},
                          subdomain,
-                         requestedDensityGridSpacing,
-                         requestedDensityGridSpacing,
+                         requestedForceBinWidth,
+                         requestedForceBinWidth,
                          {thermodynamicForceModulation},
                          enforceSymmetry,
                          usePeriodicity)
@@ -103,15 +103,16 @@ ThermodynamicForce::ThermodynamicForce(const real_t& targetDensity,
 
 ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
                                        const data::Subdomain& subdomain,
+                                       const idx_t& requestedForceBinNumber,
                                        const idx_t& requestedDensityBinNumber,
-                                       const real_t& requestedDensityBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulations,
                                        const bool enforceSymmetry,
                                        const bool usePeriodicity)
+
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
              subdomain.maxCorner[0],
-             requestedDensityBinNumber,
+             requestedForceBinNumber,
              idx_c(targetDensities.size())),
       densityProfile_("density-profile",
                       subdomain.minCorner[0],
@@ -120,7 +121,6 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensitie
                       idx_c(targetDensities.size())),
       binVolume_(subdomain.diameter[1] * subdomain.diameter[2] * densityProfile_.binSize),
       targetDensities_(targetDensities),
-      densityBinWidth_(requestedDensityBinWidth),
       thermodynamicForceModulations_(thermodynamicForceModulations),
       forceFactor_("force-factor", targetDensities.size()),
       enforceSymmetry_(enforceSymmetry),
@@ -147,7 +147,6 @@ void ThermodynamicForce::sample(data::Atoms& atoms)
                                                         densityProfile_.min,
                                                         densityProfile_.max,
                                                         densityProfile_.numBins,
-                                                        densityBinWidth_,
                                                         COORD_X);
 
     ++densityProfileSamples_;
@@ -170,7 +169,7 @@ void ThermodynamicForce::update(const real_t& smoothingSigma, const real_t& smoo
     auto smoothedDensityGradient = data::gradient(smoothedDensityProfile, usePeriodicity_);
     smoothedDensityGradient.scale(forceFactor_);
 
-    force_ -= smoothedDensityGradient;
+    force_ -= util::interpolate(smoothedDensityGradient, force_.createGrid_d());
 
     // reset sampling data
     Kokkos::deep_copy(densityProfile_.data, 0_r);

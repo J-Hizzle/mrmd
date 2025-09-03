@@ -41,7 +41,7 @@ void init_analysis(py::module_ &m)
              const int64_t axis)
           {
               return analysis::getAxialDensityProfile(
-                  numAtoms, atoms.getPos(), atoms.getType(), numTypes, min, max, numBins, binWidth, axis);
+                  numAtoms, atoms.getPos(), atoms.getType(), numTypes, min, max, numBins, axis);
           });
 
     py::class_<analysis::MeanSquareDisplacement>(m, "MeanSquareDisplacement")
