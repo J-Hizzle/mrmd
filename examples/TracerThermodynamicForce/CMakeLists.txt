@@ -18,35 +18,25 @@ add_executable(eqNVTBerendsen
 target_link_libraries(eqNVTBerendsen
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
+
 add_executable(eqNVTLangevin
         eqNVTLangevin.cpp
         )
 target_link_libraries(eqNVTLangevin
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
-add_executable(ThermoForceIterations
-        ThermoForceIterations.cpp
-        )
-target_link_libraries(ThermoForceIterations
-        PRIVATE mrmd CLI11::CLI11 fmt::fmt
-        )
+
 add_executable(tfNaive
         tfNaive.cpp
         )
 target_link_libraries(tfNaive
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
+
 add_executable(tfGuess
         tfGuess.cpp
         )
 target_link_libraries(tfGuess
-        PRIVATE mrmd CLI11::CLI11 fmt::fmt
-        )
-
-add_executable(ThermoForceIterationsBAOAB
-        ThermoForceIterationsBAOAB.cpp
-        )
-target_link_libraries(ThermoForceIterationsBAOAB
         PRIVATE mrmd CLI11::CLI11 fmt::fmt
         )
 
