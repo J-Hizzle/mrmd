@@ -291,6 +291,8 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-i,--inpfile", config.fileRestore, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
+    app.add_option("--temp", config.target_temperature, "target temperature");
+
     app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
     app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");

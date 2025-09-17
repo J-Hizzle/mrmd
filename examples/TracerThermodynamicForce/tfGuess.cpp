@@ -380,6 +380,8 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
+    app.add_option("--temp", config.target_temperature, "target temperature");
+
     app.add_option("--forceguess", config.fileRestoreTF, "initial guess for the thermodynamics force");
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");

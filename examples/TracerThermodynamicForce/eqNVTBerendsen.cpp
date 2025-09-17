@@ -275,6 +275,7 @@ int main(int argc, char* argv[])
     app.add_option("--ylength", config.Ly, "y length of the box");
     app.add_option("--zlength", config.Lz, "z length of the box");
     app.add_option("--numAtoms", config.numAtoms, "number of atoms");
+    app.add_option("--temp", config.target_temperature, "target temperature");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
     
     CLI11_PARSE(app, argc, argv);

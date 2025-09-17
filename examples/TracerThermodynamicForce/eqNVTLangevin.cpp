@@ -238,6 +238,7 @@ int main(int argc, char* argv[])
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
+    app.add_option("--temp", config.target_temperature, "target temperature");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
     CLI11_PARSE(app, argc, argv);
