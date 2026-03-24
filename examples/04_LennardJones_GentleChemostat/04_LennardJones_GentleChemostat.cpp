@@ -137,7 +137,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     util::IsInSymmetricSlab isInCentralRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
     util::IsInSymmetricSlab isInCappingRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, config.r_cut);
+        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 10_r * config.sigma + config.r_cut);
     util::IsInSymmetricSlab isInThermostatRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
 
@@ -182,12 +182,6 @@ void runLennardJones_idealGas_localCap(Config& config)
             });
         }
 
-        // reinsert atoms that left the domain according to periodic boundary conditions
-        ghostLayer.exchangeRealAtoms(atoms, subdomain);
-
-        // create ghost atoms in the ghost layer beyond the periodic boundaries
-        ghostLayer.createGhostAtoms(atoms, subdomain);
-
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
             config.skin *
@@ -196,6 +190,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         {
             // reset displacement
             maxAtomDisplacement = 0_r;
+
+            // reinsert atoms that left the domain according to periodic boundary conditions
+            ghostLayer.exchangeRealAtoms(atoms, subdomain);
+
+            // create ghost atoms in the ghost layer beyond the periodic boundaries
+            ghostLayer.createGhostAtoms(atoms, subdomain);
 
             // rebuild neighbor list
             verletList.build(atoms.getPos(),
@@ -208,7 +208,12 @@ void runLennardJones_idealGas_localCap(Config& config)
                              config.estimatedMaxNeighbors);
             ++rebuildCounter;
         }
-
+        else
+        {
+            // update ghost atom positions in the ghost layer according to periodic boundary conditions
+            ghostLayer.updateGhostAtoms(atoms, subdomain);
+        }
+        
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
