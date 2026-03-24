@@ -40,6 +40,8 @@
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
+#include "io/DumpGRO.hpp"
+#include "io/DumpH5MDParallel.hpp"
 
 using namespace mrmd;
 
@@ -87,6 +89,11 @@ struct Config
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
+
+    const std::string fileOut = "gentleChemostat";  ///< base name for output files
+    const std::string fileOutH5MD = format("{0}.h5md", fileOut);
+    const std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
+    const std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -145,10 +152,16 @@ void runLennardJones_idealGas_localCap(Config& config)
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
 
-    // print table header for simulation statistics
-    util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-    util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-
+    auto mpiInfo = std::make_shared<data::MPIInfo>();
+    auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    if (config.bOutput)
+    {
+        // print table header for simulation statistics
+        util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        // microstate
+        dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
+    }
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
 
@@ -269,26 +282,36 @@ void runLennardJones_idealGas_localCap(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
                   << atoms.numGhostAtoms << " " << std::endl;
+
+            // microstate output
+            dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
+    if (config.bOutput)
+    {
+        dumpH5MD.close();
 
-    // close statistics file
-    fStat.close();
-    auto time = timer.seconds();
-    std::cout << time << std::endl;
+        // final microstates output
+        dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
-    // write performance data to file
-    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
-    std::ofstream fout("ecab.perf", std::ofstream::app);
-    fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-         << std::endl;
-    fout.close();
+        // close statistics file
+        fStat.close();
+        auto time = timer.seconds();
+        std::cout << time << std::endl;
+
+        // write performance data to file
+        auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
+        std::ofstream fout("ecab.perf", std::ofstream::app);
+        fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
+            << std::endl;
+        fout.close();
+    }
 }
 
 int main(int argc, char* argv[])  // NOLINT
 {
-    // initialize Kokkos
-    Kokkos::ScopeGuard scope_guard(argc, argv);
+    // initialize
+    initialize(argc, argv);
 
     // print Kokkos execution space
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
@@ -311,6 +334,9 @@ int main(int argc, char* argv[])  // NOLINT
 
     // set up run simulation
     runLennardJones_idealGas_localCap(config);
+
+    // finalize
+    finalize();
 
     return EXIT_SUCCESS;
 }
