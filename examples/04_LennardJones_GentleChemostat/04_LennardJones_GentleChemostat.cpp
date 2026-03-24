@@ -130,6 +130,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     util::IsInSymmetricSlab isInCentralRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
     util::IsInSymmetricSlab isInCappingRegion(
+        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, config.r_cut);
+    util::IsInSymmetricSlab isInThermostatRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
 
     // set up thermostat for temperature control during equilibration
@@ -153,8 +155,19 @@ void runLennardJones_idealGas_localCap(Config& config)
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        // integrate equations of motion before force calculation
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        // check if still during equilibration phase
+        if (step <= config.nstepsEq)
+        {
+            // integrate equations of motion with Langevin thermostat everywhere during equilibration
+            maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        }
+        else
+        {
+            // integrate equations of motion with local Langevin thermostat during production phase
+            maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
+                return isInThermostatRegion(x, y, z);
+            });
+        }
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);

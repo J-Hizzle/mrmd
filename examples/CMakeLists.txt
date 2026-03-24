@@ -14,6 +14,7 @@
 
 add_subdirectory(00_IdealGas_NVE)
 add_subdirectory(02_LennardJones_IdealGas_LocalCap)
+add_subdirectory(04_LennardJones_GentleChemostat)
 
 add_subdirectory(Argon)
 add_subdirectory(BinaryLennardJones)
