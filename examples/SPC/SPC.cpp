@@ -25,7 +25,6 @@
 
 #include "action/BerendsenThermostat.hpp"
 #include "action/ContributeMoleculeForceToAtoms.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
 #include "action/ThermodynamicForce.hpp"
@@ -220,7 +219,6 @@ void SPC(Config& config)
     action::SPC spc;
     action::ThermodynamicForce thermodynamicForce(
         config.rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
     analysis::MeanSquareDisplacement meanSquareDisplacement;
     meanSquareDisplacement.reset(molecules);
     auto selfDiffusion = 0_r;

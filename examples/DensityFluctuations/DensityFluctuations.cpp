@@ -23,12 +23,11 @@
 
 #include "Cabana_NeighborList.hpp"
 #include "action/BerendsenThermostat.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
 #include "action/ThermodynamicForce.hpp"
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/AxialDensityProfile.hpp"
 #include "analysis/Fluctuation.hpp"
 #include "analysis/KineticEnergy.hpp"
@@ -148,7 +147,7 @@ void LJ(Config& config)
 
     communication::GhostLayer ghostLayer;
     action::LennardJones LJ(config.rc, config.sigma, config.epsilon, 0.7_r * config.sigma);
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
     action::ThermodynamicForce thermodynamicForce(
         rho, subdomain, config.densityBinWidth, config.thermodynamicForceModulation);
     analysis::MeanSquareDisplacement meanSquareDisplacement;
@@ -167,7 +166,7 @@ void LJ(Config& config)
     std::ofstream fStat("statistics.txt");
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
@@ -298,9 +297,7 @@ void LJ(Config& config)
             meanSquareDisplacement.reset(atoms);
         }
 
-        langevinThermostat.apply(atoms);
-
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
     }
     auto time = timer.seconds();
     std::cout << time << std::endl;

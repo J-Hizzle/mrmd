@@ -25,12 +25,12 @@
 #include "Cabana_NeighborList.hpp"
 #include "action/BerendsenThermostat.hpp"
 #include "action/ContributeMoleculeForceToAtoms.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
 #include "action/UpdateMolecules.hpp"
 #include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -141,7 +141,7 @@ void LJ(Config& config)
     communication::MultiResGhostLayer ghostLayer;
     weighting_function::Slab weightingFunction({-100_r, -100_r, -100_r}, 1_r, 1_r, 1);
     action::LennardJones LJ(config.rc, config.sigma, config.epsilon, 0.7_r * config.sigma);
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
     analysis::MeanSquareDisplacement meanSquareDisplacement;
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
@@ -155,7 +155,14 @@ void LJ(Config& config)
     std::ofstream fStat("statistics.txt");
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        if (step % 1000 != 0)
+        {
+            maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        }
+        else
+        {
+            maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        }
 
         action::UpdateMolecules::update(molecules, atoms, weightingFunction);
 
@@ -241,21 +248,6 @@ void LJ(Config& config)
 
             //            io::dumpCSV("atoms_" + std::to_string(step) + ".csv", atoms,
             //            false);
-        }
-
-        if (step % 1000 == 0)
-        {
-            msd = meanSquareDisplacement.calc(atoms, subdomain) / (1000_r * config.dt);
-            if ((config.temperature > 0_r) && (step > 5000))
-            {
-                config.temperature -= 7.8e-3_r;
-                config.temperature = std::max(config.temperature, 0_r);
-            }
-
-            langevinThermostat.set(config.gamma, config.temperature * 0.5_r, config.dt);
-            langevinThermostat.apply(atoms);
-
-            meanSquareDisplacement.reset(atoms);
         }
 
         action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
