@@ -310,6 +310,16 @@ void runLennardJones_idealGas_localCap(Config& config)
         fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
             << std::endl;
         fout.close();
+
+        io::dumpGRO(config.fileOutFinalGro,
+                    atoms,
+                    subdomain,
+                    0,
+                    config.resName,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
     }
 }
 
