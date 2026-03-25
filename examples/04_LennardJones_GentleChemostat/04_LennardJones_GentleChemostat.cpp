@@ -83,7 +83,7 @@ struct Config
     idx_t nstepsEq = 10000;  ///< number of equilibration steps
 
     // thermostat parameters
-    const real_t temperature =
+    real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
