@@ -41,6 +41,7 @@
 #include "io/DumpH5MDParallel.hpp"
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
+#include "io/RestoreH5MDParallel.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -54,8 +55,11 @@ using namespace mrmd;
 struct Config
 {
     // simulation time parameters
-    idx_t nsteps = 400001;  ///< number of steps to simulate
-    real_t dt = 0.002;      ///< time step size in reduced units
+    idx_t nsteps = 40000001;  ///< number of steps to simulate
+    real_t dt = 0.002;        ///< time step size in reduced units
+
+    // input file parameters
+    std::string fileRestoreH5MD = "equilibrateLangevin.h5md";
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -74,13 +78,6 @@ struct Config
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
-
-    // system parameters
-    static constexpr idx_t numAtoms = 16 * 16 * 16;  ///< number of atoms in the simulation
-    real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
-    // equilibration parameters
-    idx_t nstepsEq = 10000;  ///< number of equilibration steps
 
     // thermostat parameters
     real_t target_temperature =
@@ -101,7 +98,7 @@ struct Config
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 0;
-    const real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
+    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
     real_t thermodynamicForceModulation = 1_r;
     real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
     real_t applicationRegionMax =
@@ -114,28 +111,42 @@ struct Config
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 
-    const std::string fileOut = "gentleChemostat";  ///< base name for output files
-    const std::string fileOutH5MD = format("{0}.h5md", fileOut);
-    const std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
-    const std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
-    const std::string fileOutTF = format("{0}_tf.txt", fileOut);
-    const std::string fileOutDens = format("{0}_dens.txt", fileOut);
-    const std::string fileOutFinalTF = format("{0}_final_tf.txt", fileOut);
+    std::string fileOut = "gentleChemostat";  ///< base name for output files
+    std::string fileOutH5MD = format("{0}.h5md", fileOut);
+    std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
+    std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
+    std::string fileOutTF = format("{0}_tf.txt", fileOut);
+    std::string fileOutDens = format("{0}_dens.txt", fileOut);
+    std::string fileOutFinalTF = format("{0}_final_tf.txt", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
 {
-    // initialize simulation domain
-    data::Subdomain subdomain({0_r, 0_r, 0_r},
-                              {config.Lx, config.Lx, config.Lx},
-                              {0_r, Config::neighborCutoff, Config::neighborCutoff});
+    // initialize
+    data::Subdomain initialSubdomain;
+    auto atoms = data::Atoms(0);
+
+    // load data from file
+    auto mpiInfo = std::make_shared<data::MPIInfo>();
+    auto io = io::RestoreH5MDParallel(mpiInfo);
+    io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
+
+    // reinitialize subdomain with no ghost layer in x-direction
+    data::Subdomain subdomain(
+        {
+            initialSubdomain.minCorner[0],
+            initialSubdomain.minCorner[1],
+            initialSubdomain.minCorner[2],
+        },
+        {
+            initialSubdomain.maxCorner[0],
+            initialSubdomain.maxCorner[1],
+            initialSubdomain.maxCorner[2],
+        },
+        {0_r, initialSubdomain.ghostLayerThickness[1], initialSubdomain.ghostLayerThickness[1]});
 
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
-
-    // initialize atoms randomly in the domain
-    auto atoms =
-        util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
 
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
@@ -198,7 +209,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     io::DumpProfile dumpThermoForce;
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
-    auto mpiInfo = std::make_shared<data::MPIInfo>();
     auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
@@ -220,21 +230,11 @@ void runLennardJones_idealGas_localCap(Config& config)
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        // check if still during equilibration phase
-        if (step <= config.nstepsEq)
-        {
-            // integrate equations of motion with Langevin thermostat everywhere during
-            // equilibration
-            maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
-        }
-        else
-        {
-            // integrate equations of motion with local Langevin thermostat during production phase
-            maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
-                atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
-                    return isInThermostatRegion(x, y, z);
-                });
-        }
+        // integrate equations of motion with local Langevin thermostat during production phase
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
+            atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
+                return isInThermostatRegion(x, y, z);
+            });
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -273,68 +273,59 @@ void runLennardJones_idealGas_localCap(Config& config)
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
-        // check if still during equilibration phase
-        if (step <= config.nstepsEq)
+        if (step % config.densitySamplingInterval == 0)
         {
-            // apply capped LJ potential in the whole domain during equilibration
-            lennardJonesCap.apply(atoms, verletList);
+            thermodynamicForce.sample(atoms);
         }
-        else
+
+        if (config.bOutput && (step % config.outputInterval == 0))
         {
-            if (step % config.densitySamplingInterval == 0)
+            // density profile output
+            auto numberOfDensityProfileSamples =
+                thermodynamicForce.getNumberOfDensityProfileSamples();
+
+            real_t normalizationFactor = 1_r / densityBinVolume;
+            if (numberOfDensityProfileSamples > 0)
             {
-                thermodynamicForce.sample(atoms);
+                normalizationFactor =
+                    1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
             }
-
-            if (config.bOutput && (step % config.outputInterval == 0))
-            {
-                // density profile output
-                auto numberOfDensityProfileSamples =
-                    thermodynamicForce.getNumberOfDensityProfileSamples();
-
-                real_t normalizationFactor = 1_r / densityBinVolume;
-                if (numberOfDensityProfileSamples > 0)
-                {
-                    normalizationFactor =
-                        1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
-                }
-                auto densityProfile = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-                dumpDens.dumpScalarView(densityProfile, normalizationFactor);
-            }
-
-            if (step % config.densityUpdateInterval == 0 && step > 0)
-            {
-                thermodynamicForce.update(
-                    config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
-            }
-
-            thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
-
-            // compute and apply forces
-            lennardJones.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInCentralRegion(x1, y1, z1) || isInCentralRegion(x2, y2, z2);
-                });
-            lennardJonesCap.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInCappingRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2);
-                });
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+            dumpDens.dumpScalarView(densityProfile, normalizationFactor);
         }
+
+        if (step % config.densityUpdateInterval == 0 && step > 0)
+        {
+            thermodynamicForce.update(
+                config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+        }
+
+        thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
+
+        // compute and apply forces
+        lennardJones.apply_if(
+            atoms,
+            verletList,
+            KOKKOS_LAMBDA(const real_t x1,
+                          const real_t y1,
+                          const real_t z1,
+                          const real_t x2,
+                          const real_t y2,
+                          const real_t z2) {
+                return isInCentralRegion(x1, y1, z1) || isInCentralRegion(x2, y2, z2);
+            });
+        lennardJonesCap.apply_if(
+            atoms,
+            verletList,
+            KOKKOS_LAMBDA(const real_t x1,
+                          const real_t y1,
+                          const real_t z1,
+                          const real_t x2,
+                          const real_t y2,
+                          const real_t z2) {
+                return isInCappingRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2);
+            });
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
@@ -430,9 +421,10 @@ int main(int argc, char* argv[])  // NOLINT
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
-    app.add_option("--neq", config.nstepsEq, "number of equilibration steps");
     app.add_option("-d,--tstep", config.dt, "time step");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
+    app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
 
     app.add_option("--temp", config.target_temperature, "target temperature");
 
@@ -449,9 +441,19 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
     app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
     app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
+
     CLI11_PARSE(app, argc, argv);
 
-    // reset output parameter if output interval is negative
+    config.fileOutH5MD = format("{0}.h5md", config.fileOut);
+    config.fileOutTF = format("{0}_tf.txt", config.fileOut);
+    config.fileOutDens = format("{0}_dens.txt", config.fileOut);
+    config.fileOutFinalGro = format("{0}.gro", config.fileOut);
+    config.fileOutFinalH5MD = format("{0}_final.h5md", config.fileOut);
+    config.fileOutFinalTF = format("{0}_final_tf.txt", config.fileOut);
+
+    config.smoothingRange =
+        real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
+
     if (config.outputInterval < 0) config.bOutput = false;
 
     // set up run simulation

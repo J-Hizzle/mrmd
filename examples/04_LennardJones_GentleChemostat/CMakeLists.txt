@@ -19,3 +19,16 @@ target_link_libraries(04_LennardJones_GentleChemostat
         PRIVATE mrmd CLI11::CLI11
         )
 add_test(NAME Example.04_LennardJones_GentleChemostat COMMAND ./04_LennardJones_GentleChemostat --nsteps 10)
+
+add_executable(04_LennardJones_EquilibrateBerendsen
+        04_LennardJones_EquilibrateBerendsen.cpp
+        )
+target_link_libraries(04_LennardJones_EquilibrateBerendsen
+        PRIVATE mrmd CLI11::CLI11
+        )
+add_executable(04_LennardJones_EquilibrateLangevin
+        04_LennardJones_EquilibrateLangevin.cpp
+        )
+target_link_libraries(04_LennardJones_EquilibrateLangevin
+        PRIVATE mrmd CLI11::CLI11
+        )
