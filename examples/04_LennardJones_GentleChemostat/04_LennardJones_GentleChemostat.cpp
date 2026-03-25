@@ -59,7 +59,7 @@ struct Config
     real_t dt = 0.002;        ///< time step size in reduced units
 
     // input file parameters
-    std::string fileRestoreH5MD = "equilibrateLangevin.h5md";
+    std::string fileRestoreH5MD = "equilibrateLangevin_final.h5md";
 
     // interaction parameters
     static constexpr real_t sigma =
