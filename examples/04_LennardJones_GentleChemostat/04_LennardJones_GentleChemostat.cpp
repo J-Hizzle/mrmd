@@ -37,14 +37,14 @@
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 #include "initialization.hpp"
-#include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricSlab.hpp"
-#include "util/PrintTable.hpp"
-#include "util/simulationSetup.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MDParallel.hpp"
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
+#include "util/EnvironmentVariables.hpp"
+#include "util/IsInSymmetricSlab.hpp"
+#include "util/PrintTable.hpp"
+#include "util/simulationSetup.hpp"
 
 using namespace mrmd;
 
@@ -88,14 +88,16 @@ struct Config
     static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // AdResS parameters
-    real_t atomisticRegionDiameter = 20_r * sigma; ///< diameter of the central atomistic region in reduced units
-    real_t hybridRegionDiameter = r_cut;             ///< diameter of the surrounding hybrid region in reduced units
+    real_t atomisticRegionDiameter =
+        20_r * sigma;  ///< diameter of the central atomistic region in reduced units
+    real_t hybridRegionDiameter =
+        r_cut;  ///< diameter of the surrounding hybrid region in reduced units
 
     // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 10000;
     real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = 1/20_r * densityBinWidth;
+    real_t forceBinWidth = 1 / 20_r * densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
@@ -160,19 +162,26 @@ void runLennardJones_idealGas_localCap(Config& config)
     // set up different regions
     util::IsInSymmetricSlab isInCentralRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
-    util::IsInSymmetricSlab isInCappingRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 10_r * config.sigma + config.r_cut);
+    util::IsInSymmetricSlab isInCappingRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                              10_r * config.sigma,
+                                              10_r * config.sigma + config.r_cut);
     util::IsInSymmetricSlab isInThermostatRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
-    util::IsInSymmetricSlab isInThermoForceRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, config.applicationRegionMin, config.applicationRegionMax);
+    util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                  config.applicationRegionMin,
+                                                  config.applicationRegionMax);
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
 
     // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.densityBinWidth, config.forceBinWidth,
-                                {config.thermodynamicForceModulation}, config.enforceSymmetry, false);
+    action::ThermodynamicForce thermodynamicForce({rho},
+                                                  subdomain,
+                                                  config.densityBinWidth,
+                                                  config.forceBinWidth,
+                                                  {config.thermodynamicForceModulation},
+                                                  config.enforceSymmetry,
+                                                  false);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -182,7 +191,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
 
-    //output management
+    // output management
     io::DumpProfile dumpDens;
     io::DumpProfile dumpThermoForce;
     real_t densityBinVolume =
@@ -196,10 +205,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
         util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
         dumpDens.open(config.fileOutDens);
-        dumpDens.dumpScalarView(data::createGrid(thermodynamicForce.getDensityProfile()));
+        dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
         // thermodynamic force
         dumpThermoForce.open(config.fileOutTF);
-        dumpThermoForce.dumpScalarView(data::createGrid(thermodynamicForce.getForce()));
+        dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getForce())));
         // microstate
         dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
@@ -210,15 +221,17 @@ void runLennardJones_idealGas_localCap(Config& config)
         // check if still during equilibration phase
         if (step <= config.nstepsEq)
         {
-            // integrate equations of motion with Langevin thermostat everywhere during equilibration
+            // integrate equations of motion with Langevin thermostat everywhere during
+            // equilibration
             maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
         }
         else
         {
             // integrate equations of motion with local Langevin thermostat during production phase
-            maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
-                return isInThermostatRegion(x, y, z);
-            });
+            maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
+                atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
+                    return isInThermostatRegion(x, y, z);
+                });
         }
 
         // check if neighbor list needs to be rebuilt
@@ -249,10 +262,11 @@ void runLennardJones_idealGas_localCap(Config& config)
         }
         else
         {
-            // update ghost atom positions in the ghost layer according to periodic boundary conditions
+            // update ghost atom positions in the ghost layer according to periodic boundary
+            // conditions
             ghostLayer.updateGhostAtoms(atoms, subdomain);
         }
-        
+
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
@@ -289,7 +303,8 @@ void runLennardJones_idealGas_localCap(Config& config)
 
             if (step % config.densityUpdateInterval == 0 && step > 0)
             {
-                thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+                thermodynamicForce.update(
+                    config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
             }
 
             thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
@@ -355,8 +370,8 @@ void runLennardJones_idealGas_localCap(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
                   << atoms.numGhostAtoms << " " << std::endl;
-            
-                  // thermodynamic force output
+
+            // thermodynamic force output
             auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
                                                                    thermodynamicForce.getForce(0));
             dumpThermoForce.dumpScalarView(thermoForce);
@@ -397,7 +412,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-        << std::endl;
+         << std::endl;
     fout.close();
 }
 
