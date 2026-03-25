@@ -43,7 +43,8 @@
 #include "util/simulationSetup.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MDParallel.hpp"
-#include "data/MoleculesFromAtoms.hpp"
+#include "io/DumpProfile.hpp"
+#include "io/DumpThermoForce.hpp"
 
 using namespace mrmd;
 
@@ -93,8 +94,8 @@ struct Config
     // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 1000000;
-    real_t densityBinWidth = 0.125_r;
-    real_t forceBinWidth = 0.2_r * densityBinWidth;
+    real_t densityBinWidth = 0.2_r * sigma;
+    real_t forceBinWidth = 1/20_r * densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 10;
@@ -116,6 +117,7 @@ struct Config
     const std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
     const std::string fileOutTF = format("{0}_tf.txt", fileOut);
     const std::string fileOutDens = format("{0}_dens.txt", fileOut);
+    const std::string fileOutFinalTF = format("{0}_final_tf.txt", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -131,8 +133,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     // initialize atoms randomly in the domain
     auto atoms =
         util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
-
-    auto molecules = data::createMoleculeForEachAtom(atoms);
 
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
@@ -182,18 +182,27 @@ void runLennardJones_idealGas_localCap(Config& config)
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
 
+    //output management
+    io::DumpProfile dumpDens;
+    io::DumpProfile dumpThermoForce;
+    real_t densityBinVolume =
+        subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
     auto mpiInfo = std::make_shared<data::MPIInfo>();
     auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
         // print table header for simulation statistics
         util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
         util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        dumpDens.open(config.fileOutDens);
+        dumpDens.dumpScalarView(data::createGrid(thermodynamicForce.getDensityProfile()));
+        // thermodynamic force
+        dumpThermoForce.open(config.fileOutTF);
+        dumpThermoForce.dumpScalarView(data::createGrid(thermodynamicForce.getForce()));
         // microstate
         dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
-    // open statistics file for writing simulation statistics
-    std::ofstream fStat("statistics.txt");
 
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
@@ -256,6 +265,35 @@ void runLennardJones_idealGas_localCap(Config& config)
         }
         else
         {
+            if (step % config.densitySamplingInterval == 0)
+            {
+                thermodynamicForce.sample(atoms);
+            }
+
+            if (config.bOutput && (step % config.outputInterval == 0))
+            {
+                // density profile output
+                auto numberOfDensityProfileSamples =
+                    thermodynamicForce.getNumberOfDensityProfileSamples();
+
+                real_t normalizationFactor = 1_r / densityBinVolume;
+                if (numberOfDensityProfileSamples > 0)
+                {
+                    normalizationFactor =
+                        1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
+                }
+                auto densityProfile = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+                dumpDens.dumpScalarView(densityProfile, normalizationFactor);
+            }
+
+            if (step % config.densityUpdateInterval == 0 && step > 0)
+            {
+                thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+            }
+
+            thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
+
             // compute and apply forces
             lennardJones.apply_if(
                 atoms,
@@ -317,6 +355,11 @@ void runLennardJones_idealGas_localCap(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
                   << atoms.numGhostAtoms << " " << std::endl;
+            
+                  // thermodynamic force output
+            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                                   thermodynamicForce.getForce(0));
+            dumpThermoForce.dumpScalarView(thermoForce);
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
@@ -324,6 +367,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     }
     if (config.bOutput)
     {
+        dumpDens.close();
+        dumpThermoForce.close();
         dumpH5MD.close();
 
         // final microstates output
@@ -334,13 +379,6 @@ void runLennardJones_idealGas_localCap(Config& config)
         auto time = timer.seconds();
         std::cout << time << std::endl;
 
-        // write performance data to file
-        auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
-        std::ofstream fout("ecab.perf", std::ofstream::app);
-        fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
-            << std::endl;
-        fout.close();
-
         io::dumpGRO(config.fileOutFinalGro,
                     atoms,
                     subdomain,
@@ -350,7 +388,17 @@ void runLennardJones_idealGas_localCap(Config& config)
                     config.typeNames,
                     false,
                     true);
+
+        // final thermodynamic force output
+        io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
     }
+
+    // write performance data to file
+    auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
+    std::ofstream fout("ecab.perf", std::ofstream::app);
+    fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
+        << std::endl;
+    fout.close();
 }
 
 int main(int argc, char* argv[])  // NOLINT
