@@ -26,6 +26,7 @@
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
+#include "action/ThermodynamicForce.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
@@ -42,6 +43,7 @@
 #include "util/simulationSetup.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MDParallel.hpp"
+#include "data/MoleculesFromAtoms.hpp"
 
 using namespace mrmd;
 
@@ -84,6 +86,24 @@ struct Config
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
+    // AdResS parameters
+    real_t atomisticRegionDiameter = 20_r * sigma; ///< diameter of the central atomistic region in reduced units
+    real_t hybridRegionDiameter = r_cut;             ///< diameter of the surrounding hybrid region in reduced units
+
+    // thermodynamic force parameters
+    idx_t densitySamplingInterval = 200;
+    idx_t densityUpdateInterval = 1000000;
+    real_t densityBinWidth = 0.125_r;
+    real_t forceBinWidth = 0.2_r * densityBinWidth;
+    real_t smoothingDamping = 1_r;
+    real_t smoothingInverseDamping = 1_r / smoothingDamping;
+    idx_t smoothingNeighbors = 10;
+    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
+    real_t thermodynamicForceModulation = 2_r;
+    real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
+    real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter;
+    bool enforceSymmetry = true;
+
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
@@ -94,6 +114,8 @@ struct Config
     const std::string fileOutH5MD = format("{0}.h5md", fileOut);
     const std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
     const std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
+    const std::string fileOutTF = format("{0}_tf.txt", fileOut);
+    const std::string fileOutDens = format("{0}_dens.txt", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -109,6 +131,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     // initialize atoms randomly in the domain
     auto atoms =
         util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
+
+    auto molecules = data::createMoleculeForEachAtom(atoms);
 
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
@@ -133,16 +157,22 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "y center: " << boxCenter[1] << std::endl;
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
-    // set up different interaction regions for capped and bare LJ potential
+    // set up different regions
     util::IsInSymmetricSlab isInCentralRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
     util::IsInSymmetricSlab isInCappingRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 10_r * config.sigma + config.r_cut);
     util::IsInSymmetricSlab isInThermostatRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
+    util::IsInSymmetricSlab isInThermoForceRegion(
+        {boxCenter[0], boxCenter[1], boxCenter[2]}, config.applicationRegionMin, config.applicationRegionMax);
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
+
+    // set up thermodynamic force for density control
+    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.forceBinWidth,
+                                {config.thermodynamicForceModulation}, config.enforceSymmetry, false);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
