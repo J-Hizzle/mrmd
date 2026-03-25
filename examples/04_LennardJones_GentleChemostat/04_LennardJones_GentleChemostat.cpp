@@ -83,29 +83,29 @@ struct Config
     idx_t nstepsEq = 10000;  ///< number of equilibration steps
 
     // thermostat parameters
-    real_t temperature =
+    const real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // AdResS parameters
-    real_t atomisticRegionDiameter =
+    const real_t atomisticRegionDiameter =
         20_r * sigma;  ///< diameter of the central atomistic region in reduced units
-    real_t hybridRegionDiameter =
+    const real_t hybridRegionDiameter =
         r_cut;  ///< diameter of the surrounding hybrid region in reduced units
 
     // thermodynamic force parameters
-    idx_t densitySamplingInterval = 200;
-    idx_t densityUpdateInterval = 10000;
-    real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = 1 / 20_r * densityBinWidth;
-    real_t smoothingDamping = 1_r;
-    real_t smoothingInverseDamping = 1_r / smoothingDamping;
-    idx_t smoothingNeighbors = 10;
-    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
-    real_t thermodynamicForceModulation = 2_r;
-    real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
-    real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter;
-    bool enforceSymmetry = true;
+    const idx_t densitySamplingInterval = 200;
+    const idx_t densityUpdateInterval = 10000;
+    const real_t densityBinWidth = 0.2_r * sigma;
+    const real_t forceBinWidth = 1 / 20_r * densityBinWidth;
+    const real_t smoothingDamping = 1_r;
+    const real_t smoothingInverseDamping = 1_r / smoothingDamping;
+    const idx_t smoothingNeighbors = 0;
+    const real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
+    const real_t thermodynamicForceModulation = 1_r;
+    const real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
+    const real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter - 0.5_r * sigma;
+    const bool enforceSymmetry = true;
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
