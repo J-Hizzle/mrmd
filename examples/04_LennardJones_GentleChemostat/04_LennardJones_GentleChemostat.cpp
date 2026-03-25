@@ -54,8 +54,8 @@ using namespace mrmd;
 struct Config
 {
     // simulation time parameters
-    idx_t nsteps = 400001;               ///< number of steps to simulate
-    static constexpr real_t dt = 0.002;  ///< time step size in reduced units
+    idx_t nsteps = 400001;  ///< number of steps to simulate
+    real_t dt = 0.002;      ///< time step size in reduced units
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -83,28 +83,29 @@ struct Config
     idx_t nstepsEq = 10000;  ///< number of equilibration steps
 
     // thermostat parameters
-    real_t temperature =
+    real_t target_temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // AdResS parameters
-    const real_t atomisticRegionDiameter =
+    real_t atomisticRegionDiameter =
         20_r * sigma;  ///< diameter of the central atomistic region in reduced units
-    const real_t hybridRegionDiameter =
+    real_t hybridRegionDiameter =
         r_cut;  ///< diameter of the surrounding hybrid region in reduced units
 
     // thermodynamic force parameters
-    const idx_t densitySamplingInterval = 200;
-    const idx_t densityUpdateInterval = 10000;
-    const real_t densityBinWidth = 0.2_r * sigma;
-    const real_t forceBinWidth = 1 / 20_r * densityBinWidth;
-    const real_t smoothingDamping = 1_r;
-    const real_t smoothingInverseDamping = 1_r / smoothingDamping;
-    const idx_t smoothingNeighbors = 0;
+    idx_t densitySamplingInterval = 200;
+    idx_t densityUpdateInterval = 10000;
+    real_t densityBinWidth = 0.2_r * sigma;
+    real_t forceBinWidth = 1 / 20_r * densityBinWidth;
+    real_t smoothingDamping = 1_r;
+    real_t smoothingInverseDamping = 1_r / smoothingDamping;
+    idx_t smoothingNeighbors = 0;
     const real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
-    const real_t thermodynamicForceModulation = 1_r;
-    const real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
-    const real_t applicationRegionMax = 0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter - 0.5_r * sigma;
+    real_t thermodynamicForceModulation = 1_r;
+    real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
+    real_t applicationRegionMax =
+        0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter - 0.5_r * sigma;
     const bool enforceSymmetry = true;
 
     // output parameters
@@ -172,7 +173,8 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                   config.applicationRegionMax);
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
+                                                                config.target_temperature);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rho},
@@ -303,8 +305,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
             if (step % config.densityUpdateInterval == 0 && step > 0)
             {
-                thermodynamicForce.update(
-                    config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+                thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange);
             }
 
             thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
@@ -427,14 +428,26 @@ int main(int argc, char* argv[])  // NOLINT
     // initialize simulation configuration with command line interface
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
-    app.add_option("-n,--nsteps", config.nsteps, "total number of simulation steps");
-    app.add_option("-L,--length", config.Lx, "simulation box diameter");
-    app.add_option("-e,--numeq", config.nstepsEq, "number of equilibration steps");
+    app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
+    app.add_option("--neq", config.nstepsEq, "number of equilibration steps");
+    app.add_option("-d,--tstep", config.dt, "time step");
+    app.add_option("-o,--outint", config.outputInterval, "output interval");
+
+    app.add_option("--temp", config.target_temperature, "target temperature");
+
+    app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
+    app.add_option("--update", config.densityUpdateInterval, "density update interval");
+    app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
+    app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
+    app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
+    app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
     app.add_option(
-        "-T,--temperature",
-        config.temperature,
-        "temperature of the Langevin thermostat (negative numbers deactivate the thermostat)");
-    app.add_option("-o,--output", config.outputInterval, "output interval");
+        "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+
+    app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
+    app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
+    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
+    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
     CLI11_PARSE(app, argc, argv);
 
     // reset output parameter if output interval is negative
