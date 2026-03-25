@@ -171,7 +171,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
 
     // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.forceBinWidth,
+    action::ThermodynamicForce thermodynamicForce({rho}, subdomain, config.densityBinWidth, config.forceBinWidth,
                                 {config.thermodynamicForceModulation}, config.enforceSymmetry, false);
 
     // set up timer for runtime measurement
