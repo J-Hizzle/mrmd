@@ -80,7 +80,7 @@ struct Config
     real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
 
     // equilibration parameters
-    idx_t nstepsEq = 100000;  ///< number of equilibration steps
+    idx_t nstepsEq = 10000;  ///< number of equilibration steps
 
     // thermostat parameters
     real_t temperature =
@@ -93,7 +93,7 @@ struct Config
 
     // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
-    idx_t densityUpdateInterval = 1000000;
+    idx_t densityUpdateInterval = 10000;
     real_t densityBinWidth = 0.2_r * sigma;
     real_t forceBinWidth = 1/20_r * densityBinWidth;
     real_t smoothingDamping = 1_r;
