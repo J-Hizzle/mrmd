@@ -84,12 +84,6 @@ struct Config
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
-    // AdResS parameters
-    real_t atomisticRegionDiameter =
-        20_r * sigma;  ///< diameter of the central atomistic region in reduced units
-    real_t hybridRegionDiameter =
-        r_cut;  ///< diameter of the surrounding hybrid region in reduced units
-
     // thermodynamic force parameters
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 10000;
@@ -100,10 +94,17 @@ struct Config
     idx_t smoothingNeighbors = 0;
     real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
     real_t thermodynamicForceModulation = 1_r;
-    real_t applicationRegionMin = 0.5_r * atomisticRegionDiameter;
-    real_t applicationRegionMax =
-        0.5_r * atomisticRegionDiameter + 2_r * hybridRegionDiameter - 0.5_r * sigma;
     const bool enforceSymmetry = true;
+
+    // application regions
+    real_t centralRegionMin = 0_r;
+    real_t centralRegionMax = 10_r * sigma;
+    real_t cappingRegionMin = centralRegionMax;
+    real_t cappingRegionMax = cappingRegionMin + r_cut;
+    real_t thermostatRegionMin = centralRegionMax;
+    real_t thermostatRegionMax = 15_r * sigma;
+    real_t thermoForceRegionMin = centralRegionMax;
+    real_t thermoForceRegionMax = 14.5_r * sigma;
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -172,16 +173,18 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different regions
-    util::IsInSymmetricSlab isInCentralRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
+    util::IsInSymmetricSlab isInCentralRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                              config.centralRegionMin,
+                                              config.centralRegionMax);
     util::IsInSymmetricSlab isInCappingRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                              10_r * config.sigma,
-                                              10_r * config.sigma + config.r_cut);
-    util::IsInSymmetricSlab isInThermostatRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
+                                              config.cappingRegionMin,
+                                              config.cappingRegionMax);
+    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                 config.thermostatRegionMin,
+                                                 config.thermostatRegionMax);
     util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                                  config.applicationRegionMin,
-                                                  config.applicationRegionMax);
+                                                  config.thermoForceRegionMin,
+                                                  config.thermoForceRegionMax);
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
@@ -437,10 +440,20 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option(
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
 
-    app.add_option("--appmin", config.applicationRegionMin, "application region minimum");
-    app.add_option("--appmax", config.applicationRegionMax, "application region maximum");
-    app.add_option("--atdiameter", config.atomisticRegionDiameter, "atomistic region diameter");
-    app.add_option("--hydiameter", config.hybridRegionDiameter, "hybrid region diameter");
+    app.add_option("--centralmin", config.centralRegionMin, "central region minimum coordinate");
+    app.add_option("--centralmax", config.centralRegionMax, "central region maximum coordinate");
+    app.add_option("--cappingmin", config.cappingRegionMin, "capping region minimum coordinate");
+    app.add_option("--cappingmax", config.cappingRegionMax, "capping region maximum coordinate");
+    app.add_option(
+        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
+    app.add_option(
+        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
+    app.add_option("--thermoforcemin",
+                   config.thermoForceRegionMin,
+                   "thermodynamic force region minimum coordinate");
+    app.add_option("--thermoforcemax",
+                   config.thermoForceRegionMax,
+                   "thermodynamic force region maximum coordinate");
 
     CLI11_PARSE(app, argc, argv);
 
