@@ -69,7 +69,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    static constexpr real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
+    real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -430,7 +430,6 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
     app.add_option("--temp", config.target_temperature, "target temperature");
-
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
     app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
@@ -439,6 +438,7 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
     app.add_option(
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+    app.add_option("--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
 
     app.add_option("--centralmin", config.centralRegionMin, "central region minimum coordinate");
     app.add_option("--centralmax", config.centralRegionMax, "central region maximum coordinate");
