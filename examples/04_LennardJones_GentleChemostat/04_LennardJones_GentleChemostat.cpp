@@ -69,7 +69,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
+    real_t r_cap = 0.7_r * sigma;                   ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -97,13 +97,13 @@ struct Config
     const bool enforceSymmetry = true;
 
     // application regions
-    real_t centralRegionMin = 0_r;
-    real_t centralRegionMax = 10_r * sigma;
-    real_t cappingRegionMin = centralRegionMax;
+    real_t noCapRegionMin = 0_r;
+    real_t noCapRegionMax = 10_r * sigma;
+    real_t cappingRegionMin = noCapRegionMax;
     real_t cappingRegionMax = cappingRegionMin + r_cut;
-    real_t thermostatRegionMin = centralRegionMax;
+    real_t thermostatRegionMin = noCapRegionMax;
     real_t thermostatRegionMax = 15_r * sigma;
-    real_t thermoForceRegionMin = centralRegionMax;
+    real_t thermoForceRegionMin = noCapRegionMax;
     real_t thermoForceRegionMax = 14.5_r * sigma;
 
     // output parameters
@@ -173,9 +173,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different regions
-    util::IsInSymmetricSlab isInCentralRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                              config.centralRegionMin,
-                                              config.centralRegionMax);
+    util::IsInSymmetricSlab isInNoCapRegion(
+        {boxCenter[0], boxCenter[1], boxCenter[2]}, config.noCapRegionMin, config.noCapRegionMax);
     util::IsInSymmetricSlab isInCappingRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                               config.cappingRegionMin,
                                               config.cappingRegionMax);
@@ -316,7 +315,9 @@ void runLennardJones_idealGas_localCap(Config& config)
                           const real_t x2,
                           const real_t y2,
                           const real_t z2) {
-                return isInCentralRegion(x1, y1, z1) || isInCentralRegion(x2, y2, z2);
+                return (isInNoCapRegion(x1, y1, z1) && isInNoCapRegion(x2, y2, z2)) ||
+                       (isInNoCapRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2)) ||
+                       (isInCappingRegion(x1, y1, z1) && isInNoCapRegion(x2, y2, z2));
             });
         lennardJonesCap.apply_if(
             atoms,
@@ -440,8 +441,8 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
 
-    app.add_option("--centralmin", config.centralRegionMin, "central region minimum coordinate");
-    app.add_option("--centralmax", config.centralRegionMax, "central region maximum coordinate");
+    app.add_option("--nocapmin", config.noCapRegionMin, "central region minimum coordinate");
+    app.add_option("--nocapmax", config.noCapRegionMax, "central region maximum coordinate");
     app.add_option("--cappingmin", config.cappingRegionMin, "capping region minimum coordinate");
     app.add_option("--cappingmax", config.cappingRegionMax, "capping region maximum coordinate");
     app.add_option(
