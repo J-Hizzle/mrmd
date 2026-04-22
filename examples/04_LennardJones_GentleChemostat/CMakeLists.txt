@@ -30,3 +30,9 @@ add_executable(04_LennardJones_EquilibrateLangevin
 target_link_libraries(04_LennardJones_EquilibrateLangevin
         PRIVATE mrmd CLI11::CLI11
         )
+add_executable(04_LennardJones_VirtualReservoir
+        04_LennardJones_VirtualReservoir.cpp
+        )
+target_link_libraries(04_LennardJones_VirtualReservoir
+        PRIVATE mrmd CLI11::CLI11
+        )
