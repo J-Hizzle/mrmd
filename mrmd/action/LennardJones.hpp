@@ -240,17 +240,19 @@ void LennardJones::apply_if_asymmetric(const data::Atoms& atoms,
             energyAndVirial.energy += forceAndEnergy.energy;
             energyAndVirial.virial -= 0.5_r * forceAndEnergy.forceFactor * distSqr;
 
-            forceTmp[0] += dx * forceAndEnergy.forceFactor;
-            forceTmp[1] += dy * forceAndEnergy.forceFactor;
-            forceTmp[2] += dz * forceAndEnergy.forceFactor;
-
-            if (!predLocal(pos(jdx, 0), pos(jdx, 1), pos(jdx, 2))) continue;
-
-            force(jdx, 0) -= dx * forceAndEnergy.forceFactor;
-            force(jdx, 1) -= dy * forceAndEnergy.forceFactor;
-            force(jdx, 2) -= dz * forceAndEnergy.forceFactor;
+            if (predLocal(posTmp[0], posTmp[1], posTmp[2]))
+            {
+                force(jdx, 0) -= dx * forceAndEnergy.forceFactor;
+                force(jdx, 1) -= dy * forceAndEnergy.forceFactor;
+                force(jdx, 2) -= dz * forceAndEnergy.forceFactor;
+            }
+            else
+            {
+                forceTmp[0] += dx * forceAndEnergy.forceFactor;
+                forceTmp[1] += dy * forceAndEnergy.forceFactor;
+                forceTmp[2] += dz * forceAndEnergy.forceFactor;
+            }
         }
-        if (!predLocal(posTmp[0], posTmp[1], posTmp[2])) return;
 
         force(idx, 0) += forceTmp[0];
         force(idx, 1) += forceTmp[1];
