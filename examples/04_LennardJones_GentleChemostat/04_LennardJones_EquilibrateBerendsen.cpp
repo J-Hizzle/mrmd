@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +31,7 @@
 #include "datatypes.hpp"
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
-#include "io/DumpH5MDParallel.hpp"
+#include "io/DumpH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/ExponentialMovingAverage.hpp"
 #include "util/PrintTable.hpp"
@@ -95,8 +96,7 @@ void equilibrateBerendsen(Config& config)
     std::cout << "rho: " << rho << std::endl;
 
     // output management
-    auto mpiInfo = std::make_shared<data::MPIInfo>();
-    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    auto dump = io::DumpH5MD("J-Hizzle");
     io::dumpGRO("equilibrateBerendsenInitial.gro",
                 atoms,
                 subdomain,

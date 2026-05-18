@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,8 +30,8 @@
 #include "datatypes.hpp"
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
-#include "io/DumpH5MDParallel.hpp"
-#include "io/RestoreH5MDParallel.hpp"
+#include "io/DumpH5MD.hpp"
+#include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/ExponentialMovingAverage.hpp"
 #include "util/PrintTable.hpp"
@@ -88,8 +89,7 @@ void equilibrateLangevin(Config& config)
     auto atoms = data::Atoms(0);
 
     // load data from file
-    auto mpiInfo = std::make_shared<data::MPIInfo>();
-    auto io = io::RestoreH5MDParallel(mpiInfo);
+    auto io = io::RestoreH5MD();
     io.restore(config.fileRestoreH5MD, subdomain, atoms);
 
     const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
@@ -97,7 +97,7 @@ void equilibrateLangevin(Config& config)
     std::cout << "rho: " << rho << std::endl;
 
     // output management
-    auto dump = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    auto dump = io::DumpH5MD("J-Hizzle");
 
     // technical setup
     communication::GhostLayer ghostLayer;
@@ -112,7 +112,7 @@ void equilibrateLangevin(Config& config)
     util::ExponentialMovingAverage currentTemperature(config.temperature_averaging_coefficient);
 
     // output management
-    auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    auto dumpH5MD = io::DumpH5MD("J-Hizzle");
     if (config.bOutput)
     {
         util::printTable(

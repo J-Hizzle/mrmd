@@ -38,10 +38,10 @@
 #include "datatypes.hpp"
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
-#include "io/DumpH5MDParallel.hpp"
+#include "io/DumpH5MD.hpp"
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
-#include "io/RestoreH5MDParallel.hpp"
+#include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -129,8 +129,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     auto atoms = data::Atoms(0);
 
     // load data from file
-    auto mpiInfo = std::make_shared<data::MPIInfo>();
-    auto io = io::RestoreH5MDParallel(mpiInfo);
+    auto io = io::RestoreH5MD();
     io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
 
     // reinitialize subdomain with no ghost layer in x-direction
@@ -215,7 +214,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     io::DumpProfile dumpThermoForce;
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
-    auto dumpH5MD = io::DumpH5MDParallel(mpiInfo, "J-Hizzle");
+    auto dumpH5MD = io::DumpH5MD("J-Hizzle");
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
