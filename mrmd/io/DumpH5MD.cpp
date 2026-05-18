@@ -43,36 +43,6 @@ public:
               const data::Atoms& atoms);
 
 private:
-    hid_t createFile(const std::string& filename, const hid_t& propertyList) const;
-    void closeFile(const hid_t& fileId) const;
-    hid_t createGroup(const hid_t& parentElementId, const std::string& groupName) const;
-    void closeGroup(const hid_t& groupId) const;
-    void openBox(const data::Subdomain& subdomain) const;
-    hid_t createChunkedDataset(const hid_t& groupId,
-                               const std::vector<hsize_t>& dims,
-                               const std::string& name,
-                               const hid_t& dtype) const;
-    void closeDataset(const hid_t& datasetId) const;
-
-    template <typename T>
-    void appendData(const hid_t datasetId,
-                    const std::vector<T>& data,
-                    const std::vector<hsize_t>& dims) const;
-    template <typename T>
-    void appendDataParallel(const hid_t datasetId,
-                            const std::vector<T>& data,
-                            const std::vector<hsize_t>& dims) const;
-    void appendEdges(const idx_t& step, const real_t& dt, const data::Subdomain& subdomain) const;
-    void appendCharges(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-    void appendForces(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-    void appendMasses(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-    void appendPositions(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-    void appendRelativeMasses(const idx_t& step,
-                              const real_t& dt,
-                              const data::HostAtoms& atoms) const;
-    void appendTypes(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-    void appendVelocities(const idx_t& step, const real_t& dt, const data::HostAtoms& atoms) const;
-
     void updateCache(const data::HostAtoms& atoms);
 
     void writeHeader(hid_t fileId) const;
@@ -137,7 +107,7 @@ void DumpH5MDImpl::writeHeader(hid_t fileId) const
 
 void DumpH5MDImpl::writeBox(hid_t fileId, const data::Subdomain& subdomain) const
 {
-    std::string groupName = "/particles/" + config_.particleSubGroupName + "/box";
+    std::string groupName = "/particles/" + config_.particleGroupName + "/box";
     auto group =
         CHECK_HDF5(H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT));
     std::vector<int> dims = {3};
@@ -201,7 +171,7 @@ void DumpH5MDImpl::writePos(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = real_t;
     constexpr int64_t dimensions = 3;  ///< dimensions of the property
 
-    std::string groupName = "/particles/" + config_.particleSubGroupName + "/" + config_.posDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.posDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -236,7 +206,7 @@ void DumpH5MDImpl::writeVel(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = real_t;
     constexpr int64_t dimensions = 3;  ///< dimensions of the property
 
-    std::string groupName = "/particles/" + config_.particleSubGroupName + "/" + config_.velDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.velDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -271,8 +241,7 @@ void DumpH5MDImpl::writeForce(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = real_t;
     constexpr int64_t dimensions = 3;  ///< dimensions of the property
 
-    std::string groupName =
-        "/particles/" + config_.particleSubGroupName + "/" + config_.forceDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.forceDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -307,8 +276,7 @@ void DumpH5MDImpl::writeType(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = idx_t;
     constexpr int64_t dimensions = 1;  ///< dimensions of the property
 
-    std::string groupName =
-        "/particles/" + config_.particleSubGroupName + "/" + config_.typeDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.typeDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -341,8 +309,7 @@ void DumpH5MDImpl::writeMass(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = real_t;
     constexpr int64_t dimensions = 1;  ///< dimensions of the property
 
-    std::string groupName =
-        "/particles/" + config_.particleSubGroupName + "/" + config_.massDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.massDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -375,8 +342,7 @@ void DumpH5MDImpl::writeCharge(hid_t fileId, const data::HostAtoms& atoms)
     using Datatype = real_t;
     constexpr int64_t dimensions = 1;  ///< dimensions of the property
 
-    std::string groupName =
-        "/particles/" + config_.particleSubGroupName + "/" + config_.chargeDataset;
+    std::string groupName = "/particles/" + config_.particleGroupName + "/" + config_.chargeDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -410,7 +376,7 @@ void DumpH5MDImpl::writeRelativeMass(hid_t fileId, const data::HostAtoms& atoms)
     constexpr int64_t dimensions = 1;  ///< dimensions of the property
 
     std::string groupName =
-        "/particles/" + config_.particleSubGroupName + "/" + config_.relativeMassDataset;
+        "/particles/" + config_.particleGroupName + "/" + config_.relativeMassDataset;
     auto group = H5Gcreate(fileId, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     std::vector<Datatype> data;
@@ -455,9 +421,9 @@ void DumpH5MDImpl::dump(const std::string& filename,
 
     auto group1 =
         CHECK_HDF5(H5Gcreate(file_id, "/particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT));
-    std::string particleSubGroup = "/particles/" + config_.particleSubGroupName;
+    std::string particleGroup = "/particles/" + config_.particleGroupName;
     auto group2 = CHECK_HDF5(
-        H5Gcreate(file_id, particleSubGroup.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT));
+        H5Gcreate(file_id, particleGroup.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT));
 
     writeHeader(file_id);
     writeBox(file_id, subdomain);
@@ -474,6 +440,7 @@ void DumpH5MDImpl::dump(const std::string& filename,
 
     CHECK_HDF5(H5Fclose(file_id));
 }
+
 }  // namespace impl
 
 void DumpH5MD::dump(const std::string& filename,

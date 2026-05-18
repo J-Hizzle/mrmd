@@ -50,7 +50,7 @@ void RestoreH5MD::restore(const std::string& filename,
 {
     auto fileId = CHECK_HDF5(H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
 
-    std::string groupName = "/particles/" + particleSubGroupName_ + "/box";
+    std::string groupName = "/particles/" + particleGroupName_ + "/box";
     CHECK_HDF5(H5LTget_attribute_double(
         fileId, groupName.c_str(), "minCorner", subdomain.minCorner.data()));
     CHECK_HDF5(H5LTget_attribute_double(
