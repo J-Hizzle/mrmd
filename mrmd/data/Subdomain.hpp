@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,7 +40,7 @@ struct Subdomain
 
     Subdomain(const Point3D& minCornerArg,
               const Point3D& maxCornerArg,
-              const Point3D& ghostLayerThicknessArg)
+              const Vector3D& ghostLayerThicknessArg)
         : minCorner(minCornerArg),
           maxCorner(maxCornerArg),
           ghostLayerThickness(ghostLayerThicknessArg)
@@ -62,9 +63,10 @@ struct Subdomain
     Subdomain(const Point3D& minCornerArg,
               const Point3D& maxCornerArg,
               const real_t& ghostLayerThicknessArg)
-        : Subdomain(minCornerArg,
-                    maxCornerArg,
-                    {ghostLayerThicknessArg, ghostLayerThicknessArg, ghostLayerThicknessArg})
+        : Subdomain(
+              minCornerArg,
+              maxCornerArg,
+              Vector3D{ghostLayerThicknessArg, ghostLayerThicknessArg, ghostLayerThicknessArg})
     {
     }
 

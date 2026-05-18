@@ -14,23 +14,18 @@
 
 #pragma once
 
-#include <memory>
 #include <string>
 
 #include "data/Atoms.hpp"
-#include "data/MPIInfo.hpp"
 #include "data/Subdomain.hpp"
 
 namespace mrmd::io
 {
-
-class DumpH5MDParallel
+class DumpH5MD
 {
 public:
-    DumpH5MDParallel(const std::shared_ptr<data::MPIInfo>& mpiInfoArg,
-                     const std::string& authorArg,
-                     const std::string& particleSubGroupNameArg = "atoms")
-        : mpiInfo(mpiInfoArg), author(authorArg), particleSubGroupName(particleSubGroupNameArg)
+    DumpH5MD(const std::string& authorArg, const std::string& particleGroupNameArg = "atoms")
+        : author(authorArg), particleGroupName(particleGroupNameArg)
     {
     }
     void open(const std::string& filename,
@@ -63,8 +58,6 @@ public:
     std::string massDataset = "mass";
     std::string chargeDataset = "charge";
     std::string relativeMassDataset = "relativeMass";
-
-    std::shared_ptr<data::MPIInfo> mpiInfo;
 
     std::string author = "xxx";
     std::string particleSubGroupName = "atoms";

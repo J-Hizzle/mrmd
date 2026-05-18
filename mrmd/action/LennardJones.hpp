@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,8 +49,33 @@ private:
     bool isShifted_;  ///< potential is shifted at rc to 0
 
 public:
-    KOKKOS_FUNCTION
-    ForceAndEnergy computeForceAndEnergy(const real_t& distSqr, const idx_t& typeIdx) const;
+    KOKKOS_INLINE_FUNCTION
+    ForceAndEnergy computeForceAndEnergy(const real_t& distSqr, const idx_t& typeIdx) const
+    {
+        ForceAndEnergy ret;
+        if (distSqr >= precomputedValues_(typeIdx).cappingDistanceSqr)
+        {
+            // normal LJ calculation
+            auto frac2 = 1_r / distSqr;
+            auto frac6 = frac2 * frac2 * frac2;
+            ret.forceFactor =
+                frac6 *
+                (precomputedValues_(typeIdx).ff1 * frac6 - precomputedValues_(typeIdx).ff2) * frac2;
+            ret.energy = frac6 * (precomputedValues_(typeIdx).ef1 * frac6 -
+                                  precomputedValues_(typeIdx).ef2) -
+                         precomputedValues_(typeIdx).shift;
+            return ret;
+        }
+
+        // force capping
+        auto dist = std::sqrt(distSqr);
+        ret.forceFactor = precomputedValues_(typeIdx).cappingCoeff / dist;
+        ret.energy = precomputedValues_(typeIdx).energyAtCappingPoint -
+                     (dist - precomputedValues_(typeIdx).cappingDistance) *
+                         precomputedValues_(typeIdx).cappingCoeff -
+                     precomputedValues_(typeIdx).shift;
+        return ret;
+    }
 
     /**
      * Initialize shift and capping parameters.
@@ -92,11 +118,6 @@ public:
 
     template <TwoPositionsPredicate Pred>
     void apply_if(const data::Atoms& atoms, const HalfVerletList& verletList, const Pred& pred);
-
-    template <OnePositionPredicate Pred>
-    void apply_if_asymmetric(const data::Atoms& atoms,
-                             const HalfVerletList& verletList,
-                             const Pred& pred);
 
     LennardJones(const real_t rc,
                  const real_t& sigma,
@@ -173,85 +194,6 @@ void LennardJones::apply_if(const data::Atoms& atoms,
             force(jdx, 0) -= dx * forceAndEnergy.forceFactor;
             force(jdx, 1) -= dy * forceAndEnergy.forceFactor;
             force(jdx, 2) -= dz * forceAndEnergy.forceFactor;
-        }
-
-        force(idx, 0) += forceTmp[0];
-        force(idx, 1) += forceTmp[1];
-        force(idx, 2) += forceTmp[2];
-    };
-
-    Kokkos::parallel_reduce("LennardJones::apply_if", policy, kernel, energyAndVirial_);
-    Kokkos::fence();
-}
-
-template <OnePositionPredicate Pred>
-void LennardJones::apply_if_asymmetric(const data::Atoms& atoms,
-                                       const HalfVerletList& verletList,
-                                       const Pred& pred)
-{
-    energyAndVirial_ = data::EnergyAndVirialReducer();
-    pos_ = atoms.getPos();
-    force_ = atoms.getForce();
-    type_ = atoms.getType();
-    verletList_ = verletList;
-
-    auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
-
-    // avoid capturing this pointer
-    auto pos = pos_;
-    auto force = force_;
-    auto type = type_;
-    auto verletListLocal = verletList_;
-    auto rcSqr = rcSqr_;
-    auto LJ = LJ_;
-    auto numTypes = numTypes_;
-    auto predLocal = pred;
-
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx, data::EnergyAndVirialReducer& energyAndVirial)
-    {
-        real_t posTmp[3];
-        posTmp[0] = pos(idx, 0);
-        posTmp[1] = pos(idx, 1);
-        posTmp[2] = pos(idx, 2);
-
-        real_t forceTmp[3] = {0_r, 0_r, 0_r};
-
-        const auto numNeighbors = idx_c(HalfNeighborList::numNeighbor(verletListLocal, idx));
-        for (idx_t n = 0; n < numNeighbors; ++n)
-        {
-            idx_t jdx = idx_c(HalfNeighborList::getNeighbor(verletListLocal, idx, n));
-            assert(0 <= jdx);
-
-            if (!predLocal(posTmp[0], posTmp[1], posTmp[2]) &&
-                !predLocal(pos(jdx, 0), pos(jdx, 1), pos(jdx, 2)))
-                continue;
-
-            auto dx = posTmp[0] - pos(jdx, 0);
-            auto dy = posTmp[1] - pos(jdx, 1);
-            auto dz = posTmp[2] - pos(jdx, 2);
-
-            auto distSqr = dx * dx + dy * dy + dz * dz;
-
-            if (distSqr > rcSqr) continue;
-
-            auto typeIdx = type(idx) * numTypes + type(jdx);
-            auto forceAndEnergy = LJ.computeForceAndEnergy(distSqr, typeIdx);
-            assert(!std::isnan(forceAndEnergy.forceFactor));
-            energyAndVirial.energy += forceAndEnergy.energy;
-            energyAndVirial.virial -= 0.5_r * forceAndEnergy.forceFactor * distSqr;
-
-            if (predLocal(posTmp[0], posTmp[1], posTmp[2]))
-            {
-                force(jdx, 0) -= dx * forceAndEnergy.forceFactor;
-                force(jdx, 1) -= dy * forceAndEnergy.forceFactor;
-                force(jdx, 2) -= dz * forceAndEnergy.forceFactor;
-            }
-            else
-            {
-                forceTmp[0] += dx * forceAndEnergy.forceFactor;
-                forceTmp[1] += dy * forceAndEnergy.forceFactor;
-                forceTmp[2] += dz * forceAndEnergy.forceFactor;
-            }
         }
 
         force(idx, 0) += forceTmp[0];

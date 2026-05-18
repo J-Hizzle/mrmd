@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -127,7 +128,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different interaction regions for capped and bare LJ potential
-    util::IsInSymmetricSlab isInCentralRegion(
+    util::IsInSymmetricSlab isInNoCapRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
     util::IsInSymmetricSlab isInCappingRegion(
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
@@ -156,12 +157,6 @@ void runLennardJones_idealGas_localCap(Config& config)
         // integrate equations of motion before force calculation
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
-        // reinsert atoms that left the domain according to periodic boundary conditions
-        ghostLayer.exchangeRealAtoms(atoms, subdomain);
-
-        // create ghost atoms in the ghost layer beyond the periodic boundaries
-        ghostLayer.createGhostAtoms(atoms, subdomain);
-
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
             config.skin *
@@ -170,6 +165,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         {
             // reset displacement
             maxAtomDisplacement = 0_r;
+
+            // reinsert atoms that left the domain according to periodic boundary conditions
+            ghostLayer.exchangeRealAtoms(atoms, subdomain);
+
+            // create ghost atoms in the ghost layer beyond the periodic boundaries
+            ghostLayer.createGhostAtoms(atoms, subdomain);
 
             // rebuild neighbor list
             verletList.build(atoms.getPos(),
@@ -181,6 +182,12 @@ void runLennardJones_idealGas_localCap(Config& config)
                              subdomain.maxGhostCorner.data(),
                              config.estimatedMaxNeighbors);
             ++rebuildCounter;
+        }
+        else
+        {
+            // update ghost atom positions in the ghost layer according to periodic boundary
+            // conditions
+            ghostLayer.updateGhostAtoms(atoms, subdomain);
         }
 
         // reset forces to zero
@@ -205,7 +212,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                               const real_t x2,
                               const real_t y2,
                               const real_t z2) {
-                    return isInCentralRegion(x1, y1, z1) || isInCentralRegion(x2, y2, z2);
+                    return isInNoCapRegion(x1, y1, z1) || isInNoCapRegion(x2, y2, z2);
                 });
             lennardJonesCap.apply_if(
                 atoms,
