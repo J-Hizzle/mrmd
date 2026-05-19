@@ -301,8 +301,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
-            thermodynamicForce.update(
-                config.smoothingInverseDamping, config.smoothingRange);
+            thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange);
         }
 
         thermodynamicForce.apply(atoms);

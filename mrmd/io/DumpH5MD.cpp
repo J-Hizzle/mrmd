@@ -474,7 +474,8 @@ hid_t DumpH5MDImpl::createChunkedDataset(const hid_t& groupId,
     H5Pset_layout(plist, H5D_CHUNKED);
     H5Pset_chunk(plist, int_c(dims.size()), dims.data());
 
-    auto datasetId = H5Dcreate(groupId, name.c_str(), dtype, fileSpace, H5P_DEFAULT, plist, H5P_DEFAULT);
+    auto datasetId =
+        H5Dcreate(groupId, name.c_str(), dtype, fileSpace, H5P_DEFAULT, plist, H5P_DEFAULT);
 
     H5Pclose(plist);
     H5Sclose(fileSpace);
@@ -510,7 +511,8 @@ void DumpH5MDImpl::openBox(const data::Subdomain& subdomain) const
     CHECK_HDF5(H5Tset_strpad(boundaryType, H5T_STR_NULLPAD));
     std::vector<hsize_t> boundaryDims = {3};
     auto space = H5Screate_simple(int_c(boundaryDims.size()), boundaryDims.data(), nullptr);
-    auto att = H5Acreate(config_.boxGroupId, "boundary", boundaryType, space, H5P_DEFAULT, H5P_DEFAULT);
+    auto att =
+        H5Acreate(config_.boxGroupId, "boundary", boundaryType, space, H5P_DEFAULT, H5P_DEFAULT);
     CHECK_HDF5(H5Awrite(att, boundaryType, "periodicperiodicperiodic"));
     CHECK_HDF5(H5Aclose(att));
     CHECK_HDF5(H5Sclose(space));
@@ -686,7 +688,8 @@ void DumpH5MDImpl::appendData(const hid_t datasetId,
     CHECK_HDF5(H5Sselect_hyperslab(
         memorySpace, H5S_SELECT_SET, localOffset.data(), stride.data(), count.data(), dims.data()));
 
-    CHECK_HDF5(H5Dwrite(datasetId, typeToHDF5<T>(), memorySpace, fileSpace, H5P_DEFAULT, data.data()));
+    CHECK_HDF5(
+        H5Dwrite(datasetId, typeToHDF5<T>(), memorySpace, fileSpace, H5P_DEFAULT, data.data()));
 
     H5Sclose(fileSpace);
     H5Sclose(memorySpace);
@@ -721,7 +724,8 @@ void DumpH5MDImpl::appendCharges(const idx_t& step,
         charges.emplace_back(atoms.getCharge()(idx));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(charges.size()), numLocalParticles * dimensions);
-    appendData(config_.chargesValueSetId, charges, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.chargesValueSetId, charges, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::appendForces(const idx_t& step,
@@ -742,7 +746,8 @@ void DumpH5MDImpl::appendForces(const idx_t& step,
         positions.emplace_back(atoms.getForce()(idx, 2));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(positions.size()), numLocalParticles * dimensions);
-    appendData(config_.forceValueSetId, positions, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.forceValueSetId, positions, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::appendMasses(const idx_t& step,
@@ -761,7 +766,8 @@ void DumpH5MDImpl::appendMasses(const idx_t& step,
         masses.emplace_back(atoms.getMass()(idx));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(masses.size()), numLocalParticles * dimensions);
-    appendData(config_.massValueSetId, masses, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.massValueSetId, masses, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::appendPositions(const idx_t& step,
@@ -782,7 +788,8 @@ void DumpH5MDImpl::appendPositions(const idx_t& step,
         positions.emplace_back(atoms.getPos()(idx, 2));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(positions.size()), numLocalParticles * dimensions);
-    appendData(config_.posValueSetId, positions, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.posValueSetId, positions, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::appendRelativeMasses(const idx_t& step,
@@ -823,7 +830,8 @@ void DumpH5MDImpl::appendTypes(const idx_t& step,
         types.emplace_back(atoms.getType()(idx));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(types.size()), numLocalParticles * dimensions);
-    appendData(config_.typeValueSetId, types, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.typeValueSetId, types, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::appendVelocities(const idx_t& step,
@@ -844,7 +852,8 @@ void DumpH5MDImpl::appendVelocities(const idx_t& step,
         velocities.emplace_back(atoms.getVel()(idx, 2));
     }
     MRMD_HOST_CHECK_EQUAL(int64_c(velocities.size()), numLocalParticles * dimensions);
-    appendData(config_.velValueSetId, velocities, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
+    appendData(
+        config_.velValueSetId, velocities, std::vector<hsize_t>{1, numberLocalAtoms, dimensions});
 }
 
 void DumpH5MDImpl::updateCache(const data::HostAtoms& atoms)
