@@ -30,9 +30,22 @@ add_executable(04_LennardJones_EquilibrateLangevin
 target_link_libraries(04_LennardJones_EquilibrateLangevin
         PRIVATE mrmd CLI11::CLI11
         )
-add_executable(04_LennardJones_VirtualReservoir
-        04_LennardJones_VirtualReservoir.cpp
+
+add_executable(04_LennardJones_GentleChemostat_update
+        04_LennardJones_GentleChemostat_update.cpp
         )
-target_link_libraries(04_LennardJones_VirtualReservoir
+target_link_libraries(04_LennardJones_GentleChemostat_update
+        PRIVATE mrmd CLI11::CLI11
+        )
+add_executable(04_LennardJones_GentleChemostat_updateIf
+        04_LennardJones_GentleChemostat_updateIf.cpp
+        )
+target_link_libraries(04_LennardJones_GentleChemostat_updateIf
+        PRIVATE mrmd CLI11::CLI11
+        )
+add_executable(04_LennardJones_GentleChemostat_applyInterpolated
+        04_LennardJones_GentleChemostat_applyInterpolated.cpp
+        )
+target_link_libraries(04_LennardJones_GentleChemostat_applyInterpolated
         PRIVATE mrmd CLI11::CLI11
         )

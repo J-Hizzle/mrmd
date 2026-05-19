@@ -29,7 +29,6 @@
 #include "data/Atoms.hpp"
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
-#include "initialization.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
@@ -213,7 +212,7 @@ void equilibrateBerendsen(Config& config)
 
 int main(int argc, char* argv[])
 {
-    initialize(argc, argv);
+    Kokkos::initialize(argc, argv);
 
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
@@ -237,7 +236,7 @@ int main(int argc, char* argv[])
 
     equilibrateBerendsen(config);
 
-    finalize();
+    Kokkos::finalize();
 
     return EXIT_SUCCESS;
 }
