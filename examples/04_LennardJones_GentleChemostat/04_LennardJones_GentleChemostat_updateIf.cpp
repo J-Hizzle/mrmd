@@ -301,7 +301,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
-            thermodynamicForce.update(
+            thermodynamicForce.updateInterpolate(
                 config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
         }
 
