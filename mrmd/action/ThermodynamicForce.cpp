@@ -167,16 +167,16 @@ void ThermodynamicForce::update(const real_t& smoothingSigma, const real_t& smoo
     auto smoothedDensityGradient = data::gradient(smoothedDensityProfile, usePeriodicity_);
     smoothedDensityGradient.scale(forceFactor_);
 
-    util::updateInterpolate(force_, smoothedDensityGradient);
+    force_ -= smoothedDensityGradient;
 
     // reset sampling data
     Kokkos::deep_copy(densityProfile_.data, 0_r);
     densityProfileSamples_ = 0;
 }
 
-void ThermodynamicForce::update(const real_t& smoothingSigma,
-                                const real_t& smoothingIntensity,
-                                const util::IsInSymmetricSlab& applicationRegion)
+void ThermodynamicForce::updateInterpolate(const real_t& smoothingSigma,
+                                           const real_t& smoothingIntensity,
+                                           const util::IsInSymmetricSlab& applicationRegion)
 {
     MRMD_HOST_CHECK_GREATER(densityProfileSamples_, 0);
 
