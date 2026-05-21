@@ -88,7 +88,7 @@ struct Config
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 10000;
     real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = densityBinWidth / 20_r;
+    real_t forceBinWidth = densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 0;
