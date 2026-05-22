@@ -49,3 +49,10 @@ add_executable(04_LennardJones_GentleChemostat_applyInterpolated
 target_link_libraries(04_LennardJones_GentleChemostat_applyInterpolated
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(04_GentleChemostat_applyInterpolated_OneRegion
+        04_GentleChemostat_applyInterpolated_OneRegion.cpp
+        )
+target_link_libraries(04_GentleChemostat_applyInterpolated_OneRegion
+        PRIVATE mrmd CLI11::CLI11
+        )
