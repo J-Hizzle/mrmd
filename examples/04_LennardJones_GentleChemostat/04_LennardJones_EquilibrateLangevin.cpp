@@ -51,25 +51,27 @@ struct Config
     const std::vector<std::string> typeNames = {"Ar"};
 
     // interaction parameters
-    real_t sigma = 1_r;
-    real_t epsilon = 1_r;
-    real_t rCut = 2.5_r;
-    real_t rCap = 0.0_r;
-    bool doShift = true;
+    static constexpr real_t sigma = 1_r;
+    static constexpr real_t epsilon = 1_r;
+    static constexpr real_t rCut = 2.5_r;
+    static constexpr real_t rCap = 0.82_r;
+    static constexpr bool doShift = true;
 
     // pressure parameters
     real_t pressure_averaging_coefficient = 0.02;
 
     // thermostatting parameters
     real_t target_temperature = 1.5_r;
-    real_t temperature_relaxation_coefficient = 1.0_r;
+    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
     real_t temperature_averaging_coefficient = 0.2_r;
 
     // neighbor-list parameters
-    real_t cell_ratio = 1.0_r;
-    real_t skin = 0.3;
-    real_t neighborCutoff = rCut + skin;
-    idx_t estimatedMaxNeighbors = 60;
+    static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
+    static constexpr real_t neighborCutoff = rCut + skin;  ///< cutoff radius for neighbor list
+    static constexpr real_t cell_ratio =
+        1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
+    static constexpr idx_t estimatedMaxNeighbors =
+        60;  ///< estimated maximum number of neighbors per atom
 
     // output parameters
     bool bOutput = true;
@@ -103,7 +105,7 @@ void equilibrateLangevin(Config& config)
     action::LennardJones LJ(config.rCut, config.sigma, config.epsilon, 0.5_r * config.sigma);
     HalfVerletList verletList;
     action::VelocityVerletLangevinThermostat langevinIntegrator(
-        config.temperature_relaxation_coefficient, config.target_temperature);
+        config.gamma, config.target_temperature);
     Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
     idx_t rebuildCounter = 0;
