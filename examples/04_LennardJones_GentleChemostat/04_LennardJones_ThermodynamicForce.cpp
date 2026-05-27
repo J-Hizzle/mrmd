@@ -44,8 +44,8 @@
 #include "io/DumpThermoForce.hpp"
 #include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricSlab.hpp"
 #include "util/IsInSymmetricInterval.hpp"
+#include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
 
@@ -71,7 +71,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82_r * sigma;             ///< capping radius for LJ potential
+    real_t r_cap_inner = 0.82_r * sigma;            ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -181,8 +181,10 @@ void runLennardJones_idealGas_localCap(Config& config)
     util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                   config.thermoForceRegionMin,
                                                   config.thermoForceRegionMax);
-    util::IsInSymmetricInterval isInThermoForceUpdateRegion(
-        boxCenter[0], config.thermoForceRegionMin, config.thermoForceRegionMax);
+    util::IsInSymmetricInterval isInThermoForceUpdateRegion(boxCenter[0],
+                                                            config.thermoForceRegionMin,
+                                                            config.thermoForceRegionMax,
+                                                            -config.densityBinWidth / 2_r);
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
@@ -327,8 +329,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJonesInner.getEnergy()) /
-                      real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJonesInner.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
