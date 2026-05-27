@@ -90,7 +90,6 @@ struct Config
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 10000;
     real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 0;
@@ -194,7 +193,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     action::ThermodynamicForce thermodynamicForce({rho},
                                                   subdomain,
                                                   config.densityBinWidth,
-                                                  config.forceBinWidth,
+                                                  config.densityBinWidth,
                                                   {config.thermodynamicForceModulation},
                                                   config.enforceSymmetry,
                                                   false);
@@ -422,7 +421,6 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
-    app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
     app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
     app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
