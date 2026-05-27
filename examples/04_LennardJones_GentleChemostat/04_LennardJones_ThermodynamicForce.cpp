@@ -303,7 +303,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                 config.smoothingInverseDamping, config.smoothingRange, isInThermoForceUpdateRegion);
         }
 
-        thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
+        thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
         // compute and apply forces
         lennardJonesInner.apply_if(
