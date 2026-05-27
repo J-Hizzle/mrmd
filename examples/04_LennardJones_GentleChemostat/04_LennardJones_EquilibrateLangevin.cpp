@@ -66,7 +66,7 @@ struct Config
     real_t temperature_averaging_coefficient = 0.2_r;
 
     // neighbor-list parameters
-    static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
+    static constexpr real_t skin = 0.1_r * sigma;          ///< skin thickness for neighbor list
     static constexpr real_t neighborCutoff = rCut + skin;  ///< cutoff radius for neighbor list
     static constexpr real_t cell_ratio =
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
@@ -104,8 +104,8 @@ void equilibrateLangevin(Config& config)
     communication::GhostLayer ghostLayer;
     action::LennardJones LJ(config.rCut, config.sigma, config.epsilon, 0.5_r * config.sigma);
     HalfVerletList verletList;
-    action::VelocityVerletLangevinThermostat langevinIntegrator(
-        config.gamma, config.target_temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
+                                                                config.target_temperature);
     Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
     idx_t rebuildCounter = 0;
