@@ -71,8 +71,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.0_r * sigma;             ///< capping radius for LJ potential
-    real_t r_cap_outer = 0.7_r * sigma;
+    real_t r_cap_inner = 0.82_r * sigma;             ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -101,9 +100,7 @@ struct Config
 
     // application regions
     real_t innerIntRegionMin = 0_r;
-    real_t innerIntRegionMax = 10_r * sigma;
-    real_t outerIntRegionMin = innerIntRegionMax;
-    real_t outerIntRegionMax = outerIntRegionMin + r_cut;
+    real_t innerIntRegionMax = 10_r * sigma + r_cut;
     real_t thermostatRegionMin = innerIntRegionMax;
     real_t thermostatRegionMax = 15_r * sigma;
     real_t thermoForceRegionMin = innerIntRegionMax;
@@ -115,7 +112,7 @@ struct Config
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 
-    std::string fileOut = "gentleChemostat";  ///< base name for output files
+    std::string fileOut = "thermodynamicForce";  ///< base name for output files
     std::string fileOutH5MD = format("{0}.h5md", fileOut);
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
     std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
@@ -166,8 +163,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     // set up interaction potential and force calculation and application
     action::LennardJones lennardJonesInner(
         config.r_cut, config.sigma, config.epsilon, config.r_cap_inner);
-    action::LennardJones lennardJonesOuter(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap_outer);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -180,9 +175,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     util::IsInSymmetricSlab isInInnerIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                config.innerIntRegionMin,
                                                config.innerIntRegionMax);
-    util::IsInSymmetricSlab isInOuterIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                               config.outerIntRegionMin,
-                                               config.outerIntRegionMax);
     util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                  config.thermostatRegionMin,
                                                  config.thermostatRegionMax);
@@ -324,17 +316,6 @@ void runLennardJones_idealGas_localCap(Config& config)
                           const real_t z2) {
                 return (isInInnerIntRegion(x1, y1, z1) || isInInnerIntRegion(x2, y2, z2));
             });
-        lennardJonesOuter.apply_if(
-            atoms,
-            verletList,
-            KOKKOS_LAMBDA(const real_t x1,
-                          const real_t y1,
-                          const real_t z1,
-                          const real_t x2,
-                          const real_t y2,
-                          const real_t z2) {
-                return isInOuterIntRegion(x1, y1, z1) && isInOuterIntRegion(x2, y2, z2);
-            });
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
@@ -346,7 +327,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJonesInner.getEnergy() + lennardJonesOuter.getEnergy()) /
+            auto E0 = (lennardJonesInner.getEnergy()) /
                       real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
@@ -448,17 +429,11 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option(
         "--rcapinner", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
-    app.add_option(
-        "--rcapouter", config.r_cap_outer, "capping radius for outer Lennard-Jones potential");
 
     app.add_option(
         "--innermin", config.innerIntRegionMin, "inner interacting region minimum coordinate");
     app.add_option(
         "--innermax", config.innerIntRegionMax, "inner interacting region maximum coordinate");
-    app.add_option(
-        "--outermin", config.outerIntRegionMin, "outer interacting region minimum coordinate");
-    app.add_option(
-        "--outermax", config.outerIntRegionMax, "outer interacting region maximum coordinate");
     app.add_option(
         "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
     app.add_option(
