@@ -54,3 +54,6 @@ mrmd_add_test(NAME test.action.VelocityVerletLangevinThermostat
         
 mrmd_add_test(NAME test.action.ThermodynamicForce
         FILES ThermodynamicForce.test.cpp)
+
+mrmd_add_test(NAME test.action.CancelledLennardJones
+        FILES CancelledLennardJones.test.cpp)

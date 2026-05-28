@@ -1,0 +1,118 @@
+// Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "CancelledLennardJones.hpp"
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+
+namespace mrmd::action
+{
+void CancelledLennardJones::apply(data::Atoms& atoms, HalfVerletList& verletList)
+{
+    apply_if(
+        atoms,
+        verletList,
+        KOKKOS_LAMBDA(
+            const real_t, const real_t, const real_t, const real_t, const real_t, const real_t) {
+            return true;
+        });
+}
+
+real_t CancelledLennardJones::getEnergy() const { return energyAndVirial_.energy; }
+real_t CancelledLennardJones::getVirial() const { return energyAndVirial_.virial; }
+
+CancelledLennardJones::CancelledLennardJones(const real_t rc,
+                                             const real_t& sigma,
+                                             const real_t& epsilon,
+                                             const real_t& cappingDistance)
+    : CancelledLennardJones({cappingDistance}, {rc}, {sigma}, {epsilon}, 1, false)
+{
+}
+
+CancelledLennardJones::CancelledLennardJones(const std::vector<real_t>& cappingDistance,
+                                             const std::vector<real_t>& rc,
+                                             const std::vector<real_t>& sigma,
+                                             const std::vector<real_t>& epsilon,
+                                             const idx_t& numTypes,
+                                             const bool isShifted)
+    : LJ_(cappingDistance, rc, sigma, epsilon, numTypes, isShifted), numTypes_(1)
+{
+    auto rcMax = std::ranges::max(rc);
+    rcSqr_ = rcMax * rcMax;
+}
+}  // namespace mrmd::action
+
+namespace mrmd::action::impl
+{
+KOKKOS_FUNCTION
+void CancelledLennardJonesPotential::operator()(const idx_t& typeIdx) const
+{
+    // reset capping distance to calculate capping factors with real functions
+    auto capDist = precomputedValues_(typeIdx).cappingDistance;
+    precomputedValues_(typeIdx).cappingDistance = 0_r;
+    precomputedValues_(typeIdx).cappingDistanceSqr = 0_r;
+    auto forceAndEnergy = computeForceAndEnergy(capDist * capDist, typeIdx);
+    precomputedValues_(typeIdx).cappingCoeff = forceAndEnergy.forceFactor * capDist;
+    precomputedValues_(typeIdx).energyAtCappingPoint = forceAndEnergy.energy;
+    precomputedValues_(typeIdx).cappingDistance = capDist;
+    precomputedValues_(typeIdx).cappingDistanceSqr = capDist * capDist;
+
+    if (isShifted_)
+    {
+        precomputedValues_(typeIdx).shift =
+            computeForceAndEnergy(precomputedValues_(typeIdx).rcSqr, typeIdx).energy;
+    }
+}
+
+CancelledLennardJonesPotential::CancelledLennardJonesPotential(
+    const std::vector<real_t>& cappingDistance,
+    const std::vector<real_t>& rc,
+    const std::vector<real_t>& sigma,
+    const std::vector<real_t>& epsilon,
+    const idx_t& numTypes,
+    const bool isShifted)
+    : isShifted_(isShifted)
+{
+    assert(idx_c(cappingDistance.size()) == numTypes * numTypes);
+    assert(idx_c(rc.size()) == numTypes * numTypes);
+    assert(idx_c(sigma.size()) == numTypes * numTypes);
+    assert(idx_c(epsilon.size()) == numTypes * numTypes);
+
+    precomputedValues_ = Kokkos::View<PrecomputedValues*>(
+        "CancelledLennardJonesPotential::PrecomputedValues", numTypes * numTypes);
+    auto hPrecomputedValues = Kokkos::create_mirror_view(Kokkos::HostSpace(), precomputedValues_);
+
+    for (idx_t typeIdx = 0; typeIdx < numTypes * numTypes; ++typeIdx)
+    {
+        auto sig2 = sigma[typeIdx] * sigma[typeIdx];
+        auto sig6 = sig2 * sig2 * sig2;
+        hPrecomputedValues(typeIdx).ff1 = 48_r * epsilon[typeIdx] * sig6 * sig6;
+        hPrecomputedValues(typeIdx).ff2 = 24_r * epsilon[typeIdx] * sig6;
+        hPrecomputedValues(typeIdx).ef1 = 4_r * epsilon[typeIdx] * sig6 * sig6;
+        hPrecomputedValues(typeIdx).ef2 = 4_r * epsilon[typeIdx] * sig6;
+
+        hPrecomputedValues(typeIdx).rcSqr = rc[typeIdx] * rc[typeIdx];
+
+        hPrecomputedValues(typeIdx).cappingDistance = cappingDistance[typeIdx];
+    }
+    Kokkos::deep_copy(precomputedValues_, hPrecomputedValues);
+
+    auto policy = Kokkos::RangePolicy<>(0, numTypes * numTypes);
+    Kokkos::parallel_for(policy, *this);
+    Kokkos::fence();
+}
+}  // namespace mrmd::action::impl

@@ -1,0 +1,205 @@
+// Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "data/Atoms.hpp"
+#include "data/EnergyAndVirialReducer.hpp"
+#include "datatypes.hpp"
+
+namespace mrmd::action::impl
+{
+class CancelledLennardJonesPotential
+{
+public:
+    struct PrecomputedValues
+    {
+        real_t ff1;  ///< force factor 1
+        real_t ff2;  ///< force factor 2
+        real_t ef1;  ///< energy factor 1
+        real_t ef2;  ///< energy factor 2
+        real_t rcSqr;
+        real_t cappingDistance;
+        real_t cappingDistanceSqr;
+        real_t cappingCoeff;
+        real_t shift;  ///< shifting the potential at rc to zero
+        real_t energyAtCappingPoint;
+    };
+
+    struct ForceAndEnergy
+    {
+        real_t forceFactor;
+        real_t energy;
+    };
+
+private:
+    Kokkos::View<PrecomputedValues*> precomputedValues_;
+    bool isShifted_;  ///< potential is shifted at rc to 0
+
+public:
+    KOKKOS_INLINE_FUNCTION
+    ForceAndEnergy computeForceAndEnergy(const real_t& distSqr, const idx_t& typeIdx) const
+    {
+        ForceAndEnergy ret;
+        if (distSqr >= precomputedValues_(typeIdx).cappingDistanceSqr)
+        {
+            // normal LJ calculation
+            auto frac2 = 1_r / distSqr;
+            auto frac6 = frac2 * frac2 * frac2;
+            ret.forceFactor =
+                frac6 *
+                (precomputedValues_(typeIdx).ff1 * frac6 - precomputedValues_(typeIdx).ff2) * frac2;
+            ret.energy = frac6 * (precomputedValues_(typeIdx).ef1 * frac6 -
+                                  precomputedValues_(typeIdx).ef2) -
+                         precomputedValues_(typeIdx).shift;
+            return ret;
+        }
+
+        // force capping
+        ret.forceFactor = 0_r;  // force is cancelled beneath cancellation distance
+        ret.energy = precomputedValues_(typeIdx)
+                         .energyAtCappingPoint;  // energy is constant beneath cancellation distance
+        return ret;
+    }
+
+    /**
+     * Initialize shift and capping parameters.
+     * Will be called at initialization.
+     */
+    KOKKOS_FUNCTION
+    void operator()(const idx_t& typeIdx) const;
+
+    CancelledLennardJonesPotential(const std::vector<real_t>& cappingDistance,
+                                   const std::vector<real_t>& rc,
+                                   const std::vector<real_t>& sigma,
+                                   const std::vector<real_t>& epsilon,
+                                   const idx_t& numTypes,
+                                   const bool isShifted);
+};
+}  // namespace mrmd::action::impl
+
+namespace mrmd::action
+{
+class CancelledLennardJones
+{
+private:
+    impl::CancelledLennardJonesPotential LJ_;
+    real_t rcSqr_;
+    data::Atoms::pos_t pos_;
+    data::Atoms::force_t::atomic_access_slice force_;
+    data::Atoms::type_t type_;
+
+    HalfVerletList verletList_;
+
+    const idx_t numTypes_;
+
+    data::EnergyAndVirialReducer energyAndVirial_;
+
+public:
+    real_t getEnergy() const;
+    real_t getVirial() const;
+
+    void apply(data::Atoms& atoms, HalfVerletList& verletList);
+
+    template <TwoPositionsPredicate Pred>
+    void apply_if(const data::Atoms& atoms, const HalfVerletList& verletList, const Pred& pred);
+
+    CancelledLennardJones(const real_t rc,
+                          const real_t& sigma,
+                          const real_t& epsilon,
+                          const real_t& cappingDistance = 0_r);
+
+    CancelledLennardJones(const std::vector<real_t>& cappingDistance,
+                          const std::vector<real_t>& rc,
+                          const std::vector<real_t>& sigma,
+                          const std::vector<real_t>& epsilon,
+                          const idx_t& numTypes,
+                          const bool isShifted);
+};
+
+template <TwoPositionsPredicate Pred>
+void CancelledLennardJones::apply_if(const data::Atoms& atoms,
+                                     const HalfVerletList& verletList,
+                                     const Pred& pred)
+{
+    energyAndVirial_ = data::EnergyAndVirialReducer();
+    pos_ = atoms.getPos();
+    force_ = atoms.getForce();
+    type_ = atoms.getType();
+    verletList_ = verletList;
+
+    auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
+
+    // avoid capturing this pointer
+    auto pos = pos_;
+    auto force = force_;
+    auto type = type_;
+    auto verletListLocal = verletList_;
+    auto rcSqr = rcSqr_;
+    auto LJ = LJ_;
+    auto numTypes = numTypes_;
+    auto predLocal = pred;
+
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx, data::EnergyAndVirialReducer& energyAndVirial)
+    {
+        real_t posTmp[3];
+        posTmp[0] = pos(idx, 0);
+        posTmp[1] = pos(idx, 1);
+        posTmp[2] = pos(idx, 2);
+
+        real_t forceTmp[3] = {0_r, 0_r, 0_r};
+
+        const auto numNeighbors = idx_c(HalfNeighborList::numNeighbor(verletListLocal, idx));
+        for (idx_t n = 0; n < numNeighbors; ++n)
+        {
+            idx_t jdx = idx_c(HalfNeighborList::getNeighbor(verletListLocal, idx, n));
+            assert(0 <= jdx);
+
+            if (!predLocal(posTmp[0], posTmp[1], posTmp[2], pos(jdx, 0), pos(jdx, 1), pos(jdx, 2)))
+                continue;
+
+            auto dx = posTmp[0] - pos(jdx, 0);
+            auto dy = posTmp[1] - pos(jdx, 1);
+            auto dz = posTmp[2] - pos(jdx, 2);
+
+            auto distSqr = dx * dx + dy * dy + dz * dz;
+
+            if (distSqr > rcSqr) continue;
+
+            auto typeIdx = type(idx) * numTypes + type(jdx);
+            auto forceAndEnergy = LJ.computeForceAndEnergy(distSqr, typeIdx);
+            assert(!std::isnan(forceAndEnergy.forceFactor));
+            energyAndVirial.energy += forceAndEnergy.energy;
+            energyAndVirial.virial -= 0.5_r * forceAndEnergy.forceFactor * distSqr;
+
+            forceTmp[0] += dx * forceAndEnergy.forceFactor;
+            forceTmp[1] += dy * forceAndEnergy.forceFactor;
+            forceTmp[2] += dz * forceAndEnergy.forceFactor;
+
+            force(jdx, 0) -= dx * forceAndEnergy.forceFactor;
+            force(jdx, 1) -= dy * forceAndEnergy.forceFactor;
+            force(jdx, 2) -= dz * forceAndEnergy.forceFactor;
+        }
+
+        force(idx, 0) += forceTmp[0];
+        force(idx, 1) += forceTmp[1];
+        force(idx, 2) += forceTmp[2];
+    };
+
+    Kokkos::parallel_reduce("CancelledLennardJones::apply_if", policy, kernel, energyAndVirial_);
+    Kokkos::fence();
+}
+
+}  // namespace mrmd::action
