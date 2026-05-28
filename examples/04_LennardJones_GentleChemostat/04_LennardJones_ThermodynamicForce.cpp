@@ -314,7 +314,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                           const real_t x2,
                           const real_t y2,
                           const real_t z2) {
-                return (isInInnerIntRegion(x1, y1, z1) || isInInnerIntRegion(x2, y2, z2));
+                return (isInInnerIntRegion(x1, y1, z1) && isInInnerIntRegion(x2, y2, z2));
             });
 
         // contribute forces calculated on ghost atoms back to real atoms
