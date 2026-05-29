@@ -77,3 +77,10 @@ add_executable(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
 target_link_libraries(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(04_CancelledLennardJones_OverlapShift_ThermodynamicForce
+        04_CancelledLennardJones_OverlapShift_ThermodynamicForce.cpp
+        )
+target_link_libraries(04_CancelledLennardJones_OverlapShift_ThermodynamicForce
+        PRIVATE mrmd CLI11::CLI11
+        )
