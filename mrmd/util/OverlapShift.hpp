@@ -42,6 +42,7 @@ void OverlapShift::shift_if(data::Atoms& atoms, const Pred& pred)
 {
     auto pos = atoms.getPos();
     auto overlap = atoms.getOverlap();
+    auto shiftPosition = shiftPosition_;
 
     auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
@@ -50,7 +51,7 @@ void OverlapShift::shift_if(data::Atoms& atoms, const Pred& pred)
         {
             if (pred(pos(idx, 0), pos(idx, 1), pos(idx, 2)))
             {
-                pos(idx, 0) = shiftPosition_;
+                pos(idx, 0) = shiftPosition;
             }
         }
         overlap(idx) = false;  // reset overlap flag for next iteration

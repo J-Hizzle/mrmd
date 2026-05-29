@@ -186,7 +186,7 @@ void runCancelledLennardJones_idealGas_localCap(Config& config)
                                                             -config.densityBinWidth / 2_r);
 
     // set up overlap shift for correcting atom positions
-    util::OverlapShift overlapShift(subdomain.maxCorner[0]);
+    util::OverlapShift overlapShift(subdomain.minCorner[0]);
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
