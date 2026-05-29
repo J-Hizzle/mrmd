@@ -42,6 +42,7 @@ public:
     {
         real_t forceFactor;
         real_t energy;
+        bool isOverlapping;  ///< whether the particles are overlapping, i.e. within the cancellation distance
     };
 
 private:
@@ -67,10 +68,10 @@ public:
             return ret;
         }
 
-        // force capping
+        // force cancellation
         ret.forceFactor = 0_r;  // force is cancelled beneath cancellation distance
-        ret.energy = precomputedValues_(typeIdx)
-                         .energyAtCappingPoint;  // energy is constant beneath cancellation distance
+        ret.energy = 0_r;  // energy is cancelled beneath cancellation distance
+        ret.isOverlapping = true;
         return ret;
     }
 
@@ -100,6 +101,7 @@ private:
     data::Atoms::pos_t pos_;
     data::Atoms::force_t::atomic_access_slice force_;
     data::Atoms::type_t type_;
+    data::Atoms::overlap_t overlap_;
 
     HalfVerletList verletList_;
 
@@ -138,6 +140,7 @@ void CancelledLennardJones::apply_if(const data::Atoms& atoms,
     pos_ = atoms.getPos();
     force_ = atoms.getForce();
     type_ = atoms.getType();
+    overlap_ = atoms.getOverlap();
     verletList_ = verletList;
 
     auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
@@ -146,6 +149,7 @@ void CancelledLennardJones::apply_if(const data::Atoms& atoms,
     auto pos = pos_;
     auto force = force_;
     auto type = type_;
+    auto overlap = overlap_;
     auto verletListLocal = verletList_;
     auto rcSqr = rcSqr_;
     auto LJ = LJ_;
@@ -184,6 +188,12 @@ void CancelledLennardJones::apply_if(const data::Atoms& atoms,
             energyAndVirial.energy += forceAndEnergy.energy;
             energyAndVirial.virial -= 0.5_r * forceAndEnergy.forceFactor * distSqr;
 
+            if (forceAndEnergy.isOverlapping)
+            {
+                overlap(idx) = true;
+                overlap(jdx) = true;
+            }
+            
             forceTmp[0] += dx * forceAndEnergy.forceFactor;
             forceTmp[1] += dy * forceAndEnergy.forceFactor;
             forceTmp[2] += dz * forceAndEnergy.forceFactor;

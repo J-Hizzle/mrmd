@@ -70,3 +70,10 @@ add_executable(04_CancelledLennardJones_ThermodynamicForce
 target_link_libraries(04_CancelledLennardJones_ThermodynamicForce
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
+        04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce.cpp
+        )
+target_link_libraries(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
+        PRIVATE mrmd CLI11::CLI11
+        )

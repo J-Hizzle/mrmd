@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,6 +44,7 @@ public:
         MASS = 4,
         CHARGE = 5,
         RELATIVE_MASS = 6,  ///< relative mass of the atom in relation to the molecule
+        OVERLAP = 7,        ///< whether the atom overlaps with another atom
     };
     using DataTypes = Cabana::MemberTypes<real_t[DIMENSIONS],
                                           real_t[DIMENSIONS],
@@ -50,7 +52,8 @@ public:
                                           idx_t,
                                           real_t,
                                           real_t,
-                                          real_t>;
+                                          real_t,
+                                          bool>;
     using AtomsT = Cabana::AoSoA<DataTypes, typename DEVICE_TYPE::memory_space, VECTOR_LENGTH>;
 
     using pos_t = typename AtomsT::template member_slice_type<POS>;
@@ -60,6 +63,7 @@ public:
     using mass_t = typename AtomsT::template member_slice_type<MASS>;
     using charge_t = typename AtomsT::template member_slice_type<CHARGE>;
     using relative_mass_t = typename AtomsT::template member_slice_type<RELATIVE_MASS>;
+    using overlap_t = typename AtomsT::template member_slice_type<OVERLAP>;
 
     KOKKOS_FORCEINLINE_FUNCTION pos_t getPos() const { return pos; }
     KOKKOS_FORCEINLINE_FUNCTION vel_t getVel() const { return vel; }
@@ -68,6 +72,7 @@ public:
     KOKKOS_FORCEINLINE_FUNCTION charge_t getMass() const { return mass; }
     KOKKOS_FORCEINLINE_FUNCTION charge_t getCharge() const { return charge; }
     KOKKOS_FORCEINLINE_FUNCTION relative_mass_t getRelativeMass() const { return relativeMass; }
+    KOKKOS_FORCEINLINE_FUNCTION overlap_t getOverlap() const { return overlap; }
 
     void setForce(const real_t& val) const { Cabana::deep_copy(force, val); }
 
@@ -80,6 +85,7 @@ public:
         mass = Cabana::slice<MASS>(atoms_);
         charge = Cabana::slice<CHARGE>(atoms_);
         relativeMass = Cabana::slice<RELATIVE_MASS>(atoms_);
+        overlap = Cabana::slice<OVERLAP>(atoms_);
     }
 
     KOKKOS_INLINE_FUNCTION auto size() const { return atoms_.size(); }
@@ -107,6 +113,7 @@ public:
         mass(dst) = mass(src);
         charge(dst) = charge(src);
         relativeMass(dst) = relativeMass(src);
+        overlap(dst) = overlap(src);
     }
 
     void removeGhostAtoms()
@@ -130,6 +137,7 @@ public:
         Cabana::deep_copy(mass, 0_r);
         Cabana::deep_copy(charge, 0_r);
         Cabana::deep_copy(relativeMass, 0_r);
+        Cabana::deep_copy(overlap, false);
     }
     template <class DEVICE_TYPE_SRC, bool DEVICE_SRC>
     explicit GeneralAtoms(const GeneralAtoms<DEVICE_TYPE_SRC, DEVICE_SRC>& atoms);
@@ -144,6 +152,7 @@ private:
     mass_t mass;
     charge_t charge;
     relative_mass_t relativeMass;
+    overlap_t overlap;
 };
 }  // namespace impl
 
