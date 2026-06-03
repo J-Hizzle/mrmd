@@ -70,7 +70,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82_r * sigma;            ///< capping radius for LJ potential
+    real_t r_cap_inner = 0.82417464_r * sigma;            ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
