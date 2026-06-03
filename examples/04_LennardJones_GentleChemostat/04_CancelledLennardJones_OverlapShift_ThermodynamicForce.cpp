@@ -45,9 +45,9 @@
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricInterval.hpp"
 #include "util/IsInSymmetricSlab.hpp"
+#include "util/OverlapShift.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
-#include "util/OverlapShift.hpp"
 
 using namespace mrmd;
 
@@ -236,8 +236,8 @@ void runCancelledLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion with local Langevin thermostat during production phase
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
-            atoms, config.dt, isInThermostatRegion);
+        maxAtomDisplacement +=
+            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -320,9 +320,10 @@ void runCancelledLennardJones_idealGas_localCap(Config& config)
             });
 
         // overlap shift
-        overlapShift.shift_if(atoms, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
-            return !isInInnerIntRegion(x, y, z);
-        });
+        overlapShift.shift_if(
+            atoms, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
+                return !isInInnerIntRegion(x, y, z);
+            });
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);

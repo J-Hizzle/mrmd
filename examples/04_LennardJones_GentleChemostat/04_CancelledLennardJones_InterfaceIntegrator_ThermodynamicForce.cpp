@@ -25,10 +25,10 @@
 
 #include "Cabana_NeighborList.hpp"
 #include "action/CancelledLennardJones.hpp"
+#include "action/InterfaceIntegrator.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
 #include "action/ThermodynamicForce.hpp"
-#include "action/InterfaceIntegrator.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -185,8 +185,7 @@ void runCancelledLennardJones_idealGas_localCap(Config& config)
                                                             -config.densityBinWidth / 2_r);
 
     // set up thermostat for temperature control during equilibration
-    action::InterfaceIntegrator langevinIntegrator(config.gamma,
-                                                                config.target_temperature);
+    action::InterfaceIntegrator langevinIntegrator(config.gamma, config.target_temperature);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rho},
