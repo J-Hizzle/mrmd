@@ -34,6 +34,7 @@
 #include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/ExponentialMovingAverage.hpp"
+#include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 
 using namespace mrmd;
@@ -55,7 +56,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82417464_r * sigma;      ///< capping radius for LJ potential
+    real_t r_cap = 0_r;                             ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
@@ -69,6 +70,10 @@ struct Config
     real_t target_temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+
+    // application regions
+    real_t thermostatRegionMin = 0_r;
+    real_t thermostatRegionMax = 15_r * sigma;
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -92,22 +97,42 @@ void runAtomisticProduction(Config& config)
     auto io = io::RestoreH5MD();
     io.restore(config.fileRestoreH5MD, subdomain, atoms);
 
-    const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
+    // calculate volume of the simulation domain
+    const auto volume = subdomain.getVolume();
+
+    // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
 
-    // output management
-    auto dump = io::DumpH5MD("J-Hizzle");
-
-    // technical setup
+    // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
-    action::LennardJones LJ(config.r_cut, config.sigma, config.epsilon, 0.5_r * config.sigma);
+
+    // set up neighbor list
     HalfVerletList verletList;
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
-                                                                config.target_temperature);
-    Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
     idx_t rebuildCounter = 0;
+
+    // set up interaction potential and force calculation and application
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
+
+    // calculate and print box center coordinates
+    const auto boxCenter = subdomain.getCenter();
+
+    std::cout << "x center: " << boxCenter[0] << std::endl;
+    std::cout << "y center: " << boxCenter[1] << std::endl;
+    std::cout << "z center: " << boxCenter[2] << std::endl;
+
+    // set up region predicate for thermostat application
+    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                 config.thermostatRegionMin,
+                                                 config.thermostatRegionMax);
+
+    // set up thermostat for temperature control
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
+                                                                config.target_temperature);
+
+    // set up timer for runtime measurement
+    Kokkos::Timer timer;
 
     // set up mean square displacement analysis
     analysis::MeanSquareDisplacement meanSquareDisplacement;
@@ -130,7 +155,8 @@ void runAtomisticProduction(Config& config)
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement +=
+            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
@@ -161,7 +187,7 @@ void runAtomisticProduction(Config& config)
         Cabana::deep_copy(force, 0_r);
 
         // compute and apply forces
-        LJ.apply(atoms, verletList);
+        lennardJones.apply(atoms, verletList);
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
@@ -173,7 +199,7 @@ void runAtomisticProduction(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (LJ.getEnergy()) / real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJones.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -242,7 +268,7 @@ int main(int argc, char* argv[])
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
     Config config;
-    CLI::App app{"NVT equilibration run with Langevin thermostat"};
+    CLI::App app{"atomistic production"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");

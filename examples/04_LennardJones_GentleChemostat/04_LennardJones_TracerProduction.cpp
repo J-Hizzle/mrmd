@@ -174,7 +174,7 @@ void runTracerProduction(Config& config)
                                                   config.thermoForceRegionMin,
                                                   config.thermoForceRegionMax);
 
-    // set up thermostat for temperature control during equilibration
+    // set up thermostat for temperature control
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
                                                                 config.target_temperature);
 
