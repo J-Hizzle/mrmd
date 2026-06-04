@@ -72,7 +72,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82417464_r * sigma;            ///< capping radius for LJ potential
+    real_t r_cap_inner = 0.82417464_r * sigma;      ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
@@ -141,13 +141,8 @@ void runTracerProduction(Config& config)
     // restore thermodynamic force from file
     std::cout << "restoring thermodynamic force from file" << std::endl;
 
-    auto thermodynamicForce = io::restoreThermoForce(config.fileRestoreTF,
-                                                     subdomain,
-                                                     {rho},
-                                                     {0_r},
-                                                     true,
-                                                     false,
-                                                     1);
+    auto thermodynamicForce =
+        io::restoreThermoForce(config.fileRestoreTF, subdomain, {rho}, {0_r}, true, false, 1);
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -208,8 +203,8 @@ void runTracerProduction(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion with local Langevin thermostat during production phase
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
-            atoms, config.dt, isInThermostatRegion);
+        maxAtomDisplacement +=
+            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -354,8 +349,7 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--temp", config.target_temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
 
-    app.add_option(
-        "--forceinp", config.fileRestoreTF, "input file for the thermodynamics force");
+    app.add_option("--forceinp", config.fileRestoreTF, "input file for the thermodynamics force");
     app.add_option(
         "--rcapinner", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
 
