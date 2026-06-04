@@ -31,63 +31,29 @@ target_link_libraries(04_LennardJones_EquilibrateLangevin
         PRIVATE mrmd CLI11::CLI11
         )
 
-add_executable(04_LennardJones_GentleChemostat_update
-        04_LennardJones_GentleChemostat_update.cpp
-        )
-target_link_libraries(04_LennardJones_GentleChemostat_update
-        PRIVATE mrmd CLI11::CLI11
-        )
-add_executable(04_LennardJones_GentleChemostat_updateIf
-        04_LennardJones_GentleChemostat_updateIf.cpp
-        )
-target_link_libraries(04_LennardJones_GentleChemostat_updateIf
-        PRIVATE mrmd CLI11::CLI11
-        )
-add_executable(04_LennardJones_GentleChemostat_applyInterpolated
-        04_LennardJones_GentleChemostat_applyInterpolated.cpp
-        )
-target_link_libraries(04_LennardJones_GentleChemostat_applyInterpolated
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(04_GentleChemostat_applyInterpolated_OneRegion
-        04_GentleChemostat_applyInterpolated_OneRegion.cpp
-        )
-target_link_libraries(04_GentleChemostat_applyInterpolated_OneRegion
-        PRIVATE mrmd CLI11::CLI11
-        )
-
 add_executable(04_LennardJones_ThermodynamicForce
         04_LennardJones_ThermodynamicForce.cpp
         )
 target_link_libraries(04_LennardJones_ThermodynamicForce
         PRIVATE mrmd CLI11::CLI11
         )
-
-add_executable(04_CancelledLennardJones_ThermodynamicForce
-        04_CancelledLennardJones_ThermodynamicForce.cpp
-        )
-target_link_libraries(04_CancelledLennardJones_ThermodynamicForce
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
-        04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce.cpp
-        )
-target_link_libraries(04_CancelledLennardJones_InterfaceIntegrator_ThermodynamicForce
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(04_CancelledLennardJones_OverlapShift_ThermodynamicForce
-        04_CancelledLennardJones_OverlapShift_ThermodynamicForce.cpp
-        )
-target_link_libraries(04_CancelledLennardJones_OverlapShift_ThermodynamicForce
-        PRIVATE mrmd CLI11::CLI11
-        )
-
 add_executable(04_LennardJones_ThermodynamicForce_InitialGuess
         04_LennardJones_ThermodynamicForce_InitialGuess.cpp
         )
 target_link_libraries(04_LennardJones_ThermodynamicForce_InitialGuess
+        PRIVATE mrmd CLI11::CLI11
+        )
+
+add_executable(04_LennardJones_AtomisticProduction
+        04_LennardJones_AtomisticProduction.cpp
+        )
+target_link_libraries(04_LennardJones_AtomisticProduction
+        PRIVATE mrmd CLI11::CLI11
+        )
+
+add_executable(04_LennardJones_TracerProduction
+        04_LennardJones_TracerProduction.cpp
+        )
+target_link_libraries(04_LennardJones_TracerProduction
         PRIVATE mrmd CLI11::CLI11
         )

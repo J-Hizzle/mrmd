@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,7 +42,9 @@
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
 #include "io/RestoreH5MD.hpp"
+#include "io/RestoreThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
+#include "util/IsInSymmetricInterval.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
@@ -58,7 +61,8 @@ struct Config
     real_t dt = 0.002;        ///< time step size in reduced units
 
     // input file parameters
-    std::string fileRestoreH5MD = "equilibrateLangevin_final.h5md";
+    std::string fileRestoreH5MD = "thermodynamicForce_final.h5md";
+    std::string fileRestoreTF;
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -68,10 +72,10 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82_r * sigma;            ///< capping radius for LJ potential
+    real_t r_cap_inner = 0.82417464_r * sigma;            ///< capping radius for LJ potential
 
     // neighbor list parameters
-    static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
+    static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
     static constexpr real_t neighborCutoff = r_cut + skin;  ///< cutoff radius for neighbor list
     static constexpr real_t cell_ratio =
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
@@ -82,18 +86,6 @@ struct Config
     real_t target_temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
-
-    // thermodynamic force parameters
-    idx_t densitySamplingInterval = 200;
-    idx_t densityUpdateInterval = 10000;
-    real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = densityBinWidth;
-    real_t smoothingDamping = 1_r;
-    real_t smoothingInverseDamping = 1_r / smoothingDamping;
-    idx_t smoothingNeighbors = 0;
-    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
-    real_t thermodynamicForceModulation = 1_r;
-    const bool enforceSymmetry = true;
 
     // application regions
     real_t innerIntRegionMin = 0_r;
@@ -109,16 +101,13 @@ struct Config
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 
-    std::string fileOut = "gentleChemostat_applyInterpolated";  ///< base name for output files
+    std::string fileOut = "tracerProduction";  ///< base name for output files
     std::string fileOutH5MD = format("{0}.h5md", fileOut);
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
     std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
-    std::string fileOutTF = format("{0}_tf.txt", fileOut);
-    std::string fileOutDens = format("{0}_dens.txt", fileOut);
-    std::string fileOutFinalTF = format("{0}_final_tf.txt", fileOut);
 };
 
-void runLennardJones_idealGas_localCap(Config& config)
+void runTracerProduction(Config& config)
 {
     // initialize
     data::Subdomain initialSubdomain;
@@ -148,6 +137,17 @@ void runLennardJones_idealGas_localCap(Config& config)
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
+
+    // restore thermodynamic force from file
+    std::cout << "restoring thermodynamic force from file" << std::endl;
+
+    auto thermodynamicForce = io::restoreThermoForce(config.fileRestoreTF,
+                                                     subdomain,
+                                                     {rho},
+                                                     {0_r},
+                                                     true,
+                                                     false,
+                                                     1);
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -183,15 +183,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
                                                                 config.target_temperature);
 
-    // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({rho},
-                                                  subdomain,
-                                                  config.densityBinWidth,
-                                                  config.forceBinWidth,
-                                                  {config.thermodynamicForceModulation},
-                                                  config.enforceSymmetry,
-                                                  false);
-
     // set up timer for runtime measurement
     Kokkos::Timer timer;
 
@@ -201,10 +192,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     auto msd = 0_r;
 
     // output management
-    io::DumpProfile dumpDens;
-    io::DumpProfile dumpThermoForce;
-    real_t densityBinVolume =
-        subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
     auto dumpH5MD = io::DumpH5MD("J-Hizzle");
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
@@ -212,14 +199,8 @@ void runLennardJones_idealGas_localCap(Config& config)
         // print table header for simulation statistics
         util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
         util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-        dumpDens.open(config.fileOutDens);
-        dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
-            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
-        // thermodynamic force
-        dumpThermoForce.open(config.fileOutTF);
-        dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
-            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getForce())));
-        // microstate
+
+        // phase point output setup
         dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
 
@@ -228,9 +209,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     {
         // integrate equations of motion with local Langevin thermostat during production phase
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
-            atoms, config.dt, KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z) {
-                return isInThermostatRegion(x, y, z);
-            });
+            atoms, config.dt, isInThermostatRegion);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -269,36 +248,9 @@ void runLennardJones_idealGas_localCap(Config& config)
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
-        if (step % config.densitySamplingInterval == 0)
-        {
-            thermodynamicForce.sample(atoms);
-        }
-
-        if (config.bOutput && (step % config.outputInterval == 0))
-        {
-            // density profile output
-            auto numberOfDensityProfileSamples =
-                thermodynamicForce.getNumberOfDensityProfileSamples();
-
-            real_t normalizationFactor = 1_r / densityBinVolume;
-            if (numberOfDensityProfileSamples > 0)
-            {
-                normalizationFactor =
-                    1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
-            }
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-            dumpDens.dumpScalarView(densityProfile, normalizationFactor);
-        }
-
-        if (step % config.densityUpdateInterval == 0 && step > 0)
-        {
-            thermodynamicForce.update(config.smoothingInverseDamping, config.smoothingRange);
-        }
-
+        // compute and apply forces
         thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
-        // compute and apply forces
         lennardJonesInner.apply_if(
             atoms,
             verletList,
@@ -321,7 +273,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = lennardJonesInner.getEnergy() / real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJonesInner.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -347,22 +299,15 @@ void runLennardJones_idealGas_localCap(Config& config)
                   << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
                   << atoms.numGhostAtoms << " " << std::endl;
 
-            // thermodynamic force output
-            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                                   thermodynamicForce.getForce(0));
-            dumpThermoForce.dumpScalarView(thermoForce);
-
-            // microstate output
+            // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
     if (config.bOutput)
     {
-        dumpDens.close();
-        dumpThermoForce.close();
         dumpH5MD.close();
 
-        // final microstates output
+        // final phase point output
         dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
         // close statistics file
@@ -379,9 +324,6 @@ void runLennardJones_idealGas_localCap(Config& config)
                     config.typeNames,
                     false,
                     true);
-
-        // final thermodynamic force output
-        io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
     }
 
     // write performance data to file
@@ -412,16 +354,11 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--temp", config.target_temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
 
-    app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
-    app.add_option("--update", config.densityUpdateInterval, "density update interval");
-    app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
-    app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
-    app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
-    app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
     app.add_option(
-        "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+        "--forceinp", config.fileRestoreTF, "input file for the thermodynamics force");
     app.add_option(
         "--rcapinner", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
+
     app.add_option(
         "--innermin", config.innerIntRegionMin, "inner interacting region minimum coordinate");
     app.add_option(
@@ -440,19 +377,13 @@ int main(int argc, char* argv[])  // NOLINT
     CLI11_PARSE(app, argc, argv);
 
     config.fileOutH5MD = format("{0}.h5md", config.fileOut);
-    config.fileOutTF = format("{0}_tf.txt", config.fileOut);
-    config.fileOutDens = format("{0}_dens.txt", config.fileOut);
     config.fileOutFinalGro = format("{0}_final.gro", config.fileOut);
     config.fileOutFinalH5MD = format("{0}_final.h5md", config.fileOut);
-    config.fileOutFinalTF = format("{0}_final_tf.txt", config.fileOut);
-
-    config.smoothingRange =
-        real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
 
     if (config.outputInterval < 0) config.bOutput = false;
 
     // set up run simulation
-    runLennardJones_idealGas_localCap(config);
+    runTracerProduction(config);
 
     // finalize
     Kokkos::finalize();

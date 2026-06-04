@@ -34,56 +34,55 @@
 #include "util/EnvironmentVariables.hpp"
 #include "util/ExponentialMovingAverage.hpp"
 #include "util/PrintTable.hpp"
+#include "analysis/MeanSquareDisplacement.hpp"
 
 using namespace mrmd;
 
 struct Config
 {
-    // time parameters
-    idx_t nsteps = 100001;
-    real_t dt = 0.002;
+    // simulation time parameters
+    idx_t nsteps = 40000001;  ///< number of steps to simulate
+    real_t dt = 0.002;        ///< time step size in reduced units
 
     // input file parameters
-    std::string fileRestoreH5MD = "equilibrateBerendsen.h5md";
-
-    // system parameters
-    const std::string resName = "Argon";
-    const std::vector<std::string> typeNames = {"Ar"};
+    std::string fileRestoreH5MD = "equilibrateLangevin_final.h5md";
 
     // interaction parameters
-    static constexpr real_t sigma = 1_r;
-    static constexpr real_t epsilon = 1_r;
-    static constexpr real_t rCut = 2.5_r;
-    static constexpr real_t rCap = 0.82417464_r;
-    static constexpr bool doShift = true;
+    static constexpr real_t sigma =
+        1_r;  ///< distance at which LJ potential is zero in reduced units
+    static constexpr real_t epsilon = 1_r;  ///< energy well depth of LJ potential in reduced units
+    static constexpr real_t mass = 1_r;     ///< mass of one atom in reduced units
+    static constexpr real_t maxVelocity =
+        1_r;  ///< maximum initial velocity component in reduced units
+    static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
+    real_t r_cap_inner = 0.82417464_r * sigma;            ///< capping radius for LJ potential
 
-    // pressure parameters
-    real_t pressure_averaging_coefficient = 0.02;
-
-    // thermostatting parameters
-    real_t target_temperature = 1.5_r;
-    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
-    real_t temperature_averaging_coefficient = 0.2_r;
-
-    // neighbor-list parameters
-    static constexpr real_t skin = 0.3_r * sigma;          ///< skin thickness for neighbor list
-    static constexpr real_t neighborCutoff = rCut + skin;  ///< cutoff radius for neighbor list
+    // neighbor list parameters
+    static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
+    static constexpr real_t neighborCutoff = r_cut + skin;  ///< cutoff radius for neighbor list
     static constexpr real_t cell_ratio =
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
 
+    // thermostat parameters
+    real_t target_temperature =
+        1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
+    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+
     // output parameters
-    bool bOutput = true;
-    idx_t outputInterval = 1000;
-    std::string fileOut = "equilibrateLangevin";
+    bool bOutput = true;                  ///< whether to output data files
+    idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
+    const std::string resName = "Argon";  ///< residue name for output files
+    const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
+
+    std::string fileOut = "atomisticProduction";  ///< base name for output files
     std::string fileOutH5MD = format("{0}.h5md", fileOut);
-    std::string fileOutGro = format("{0}.gro", fileOut);
-    std::string fileOutTF = format("{0}_tf.txt", fileOut);
+    std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
     std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
 };
 
-void equilibrateLangevin(Config& config)
+void runAtomisticProduction(Config& config)
 {
     // initialize
     data::Subdomain subdomain;
@@ -102,28 +101,33 @@ void equilibrateLangevin(Config& config)
 
     // technical setup
     communication::GhostLayer ghostLayer;
-    action::LennardJones LJ(config.rCut, config.sigma, config.epsilon, 0.5_r * config.sigma);
+    action::LennardJones LJ(config.r_cut, config.sigma, config.epsilon, 0.5_r * config.sigma);
     HalfVerletList verletList;
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
                                                                 config.target_temperature);
     Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
     idx_t rebuildCounter = 0;
-    util::ExponentialMovingAverage currentPressure(config.pressure_averaging_coefficient);
-    util::ExponentialMovingAverage currentTemperature(config.temperature_averaging_coefficient);
+
+    // set up mean square displacement analysis
+    analysis::MeanSquareDisplacement meanSquareDisplacement;
+    meanSquareDisplacement.reset(atoms);
+    auto msd = 0_r;
 
     // output management
     auto dumpH5MD = io::DumpH5MD("J-Hizzle");
+    std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
-        util::printTable(
-            "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
-        util::printTableSep(
-            "step", "wall time", "T", "p", "V", "E_kin", "E_LJ", "E_total", "Nlocal", "Nghost");
+        // print table header for simulation statistics
+        util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+
+        // phase point output setup
         dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
     }
 
-    // main integration loop
+    // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
@@ -135,17 +139,8 @@ void equilibrateLangevin(Config& config)
 
             ghostLayer.exchangeRealAtoms(atoms, subdomain);
 
-            real_t gridDelta[3] = {
-                config.neighborCutoff, config.neighborCutoff, config.neighborCutoff};
-            LinkedCellList linkedCellList(atoms.getPos(),
-                                          0,
-                                          atoms.numLocalAtoms,
-                                          gridDelta,
-                                          subdomain.minCorner.data(),
-                                          subdomain.maxCorner.data());
-            //            atoms.permute(linkedCellList);
-
             ghostLayer.createGhostAtoms(atoms, subdomain);
+
             verletList.build(atoms.getPos(),
                              0,
                              atoms.numLocalAtoms,
@@ -161,33 +156,50 @@ void equilibrateLangevin(Config& config)
             ghostLayer.updateGhostAtoms(atoms, subdomain);
         }
 
+        // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
+        // compute and apply forces
         LJ.apply(atoms, verletList);
 
-        auto Ek = analysis::getKineticEnergy(atoms);
-        currentPressure << 2_r * (Ek - LJ.getVirial()) / (3_r * volume);
-        Ek /= real_c(atoms.numLocalAtoms);
-        currentTemperature << (2_r / 3_r) * Ek;
-
+        // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
+
+        // integrate equations of motion after force calculation
         langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
+        // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))
         {
+            // calculate statistics
+            auto E0 = (LJ.getEnergy()) / real_c(atoms.numLocalAtoms);
+            auto Ek = analysis::getMeanKineticEnergy(atoms);
+            auto systemMomentum = analysis::getSystemMomentum(atoms);
+            auto T = (2_r / 3_r) * Ek;
+            auto p = analysis::getPressure(atoms, subdomain);
+            msd = meanSquareDisplacement.calc(atoms, subdomain) /
+                  (real_c(config.outputInterval) * config.dt);
+            meanSquareDisplacement.reset(atoms);
+
+            // print statistics to console
             util::printTable(step,
                              timer.seconds(),
-                             currentTemperature,
-                             currentPressure,
-                             volume,
+                             T,
                              Ek,
-                             LJ.getEnergy() / real_c(atoms.numLocalAtoms),
-                             Ek + LJ.getEnergy() / real_c(atoms.numLocalAtoms),
+                             E0,
+                             E0 + Ek,
+                             p,
+                             msd,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
 
-            // microstate output
+            // dump statistics to file
+            fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
+                  << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
+                  << atoms.numGhostAtoms << " " << std::endl;
+
+            // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
@@ -199,7 +211,12 @@ void equilibrateLangevin(Config& config)
         // final microstates output
         dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
-        io::dumpGRO(config.fileOutGro,
+        // close statistics file
+        fStat.close();
+        auto time = timer.seconds();
+        std::cout << time << std::endl;
+
+        io::dumpGRO(config.fileOutFinalGro,
                     atoms,
                     subdomain,
                     0,
@@ -209,11 +226,9 @@ void equilibrateLangevin(Config& config)
                     false,
                     true);
     }
+
+    // write performance data to file
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
-
-    auto time = timer.seconds();
-    std::cout << time << std::endl;
-
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
          << std::endl;
@@ -238,12 +253,11 @@ int main(int argc, char* argv[])
     CLI11_PARSE(app, argc, argv);
 
     config.fileOutH5MD = format("{0}.h5md", config.fileOut);
-    config.fileOutGro = format("{0}.gro", config.fileOut);
-    config.fileOutTF = format("{0}_tf.txt", config.fileOut);
+    config.fileOutFinalGro = format("{0}.gro", config.fileOut);
     config.fileOutFinalH5MD = format("{0}_final.h5md", config.fileOut);
 
     if (config.outputInterval < 0) config.bOutput = false;
-    equilibrateLangevin(config);
+    runAtomisticProduction(config);
 
     Kokkos::finalize();
 

@@ -75,7 +75,7 @@ struct Config
     real_t r_cap_inner = 0.82417464_r * sigma;            ///< capping radius for LJ potential
 
     // neighbor list parameters
-    static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
+    static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
     static constexpr real_t neighborCutoff = r_cut + skin;  ///< cutoff radius for neighbor list
     static constexpr real_t cell_ratio =
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
