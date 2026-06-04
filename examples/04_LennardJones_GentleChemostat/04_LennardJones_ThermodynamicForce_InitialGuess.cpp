@@ -362,7 +362,11 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                                    thermodynamicForce.getForce(0));
             dumpThermoForce.dumpScalarView(thermoForce);
 
-            io::dumpThermoForce(format("{0}_i{1:02}_tf.txt", config.fileOut, idx_c(std::floor(step/config.densityUpdateInterval))), thermodynamicForce, 0);
+            io::dumpThermoForce(format("{0}_i{1:02}_tf.txt",
+                                       config.fileOut,
+                                       idx_c(std::floor(step / config.densityUpdateInterval))),
+                                thermodynamicForce,
+                                0);
 
             // microstate output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
