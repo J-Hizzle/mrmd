@@ -36,9 +36,9 @@ void CountingPlane::startCounting(data::Atoms& atoms)
         "ComputeDistanceToPlane",
         Kokkos::RangePolicy<>(0, atoms.size()),
         KOKKOS_LAMBDA(const idx_t i) {
-            distanceToPlane(i) = (pos(i, 0) - pointOnPlane[0]) * planeNormal[0] +
-                                 (pos(i, 1) - pointOnPlane[1]) * planeNormal[1] +
-                                 (pos(i, 2) - pointOnPlane[2]) * planeNormal[2];
+            distanceToPlane(i) = (pointOnPlane[0] - pos(i, 0)) * planeNormal[0] +
+                                 (pointOnPlane[1] - pos(i, 1)) * planeNormal[1] +
+                                 (pointOnPlane[2] - pos(i, 2)) * planeNormal[2];
         });
 }
 
@@ -58,12 +58,12 @@ int64_t CountingPlane::stopCounting(data::Atoms& atoms)
         "CountCrossings",
         Kokkos::RangePolicy<>(0, atoms.size()),
         KOKKOS_LAMBDA(const idx_t i, int64_t& localCount) {
-            auto dist = (pos(i, 0) - pointOnPlane[0]) * planeNormal[0] +
-                        (pos(i, 1) - pointOnPlane[1]) * planeNormal[1] +
-                        (pos(i, 2) - pointOnPlane[2]) * planeNormal[2];
+            auto dist = (pointOnPlane[0] - pos(i, 0)) * planeNormal[0] +
+                        (pointOnPlane[1] - pos(i, 1)) * planeNormal[1] +
+                        (pointOnPlane[2] - pos(i, 2)) * planeNormal[2];
             if (dist * distanceToPlane(i) < 0)
             {
-                localCount += 1;
+                localCount += (dist > 0) ? 1 : -1;
             }
         },
         count);
