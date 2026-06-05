@@ -36,7 +36,44 @@ namespace data
  */
 struct Subdomain
 {
+    enum class BoundaryCondition
+    {
+        PERIODIC,
+        OPEN
+    };
+
     Subdomain() = default;
+
+    Subdomain(const Point3D& minCornerArg,
+              const Point3D& maxCornerArg,
+              const Kokkos::Array<BoundaryCondition, 3>& boundaryConditionsArg,
+              const real_t& ghostLayerThicknessArg)
+        : minCorner(minCornerArg),
+          maxCorner(maxCornerArg),
+          boundaryConditions(boundaryConditionsArg)
+    {
+        for (auto dim = 0; dim < 3; ++dim)
+        {
+            switch (boundaryConditions[dim])
+            {
+                case BoundaryCondition::PERIODIC:
+                    ghostLayerThickness[dim] = ghostLayerThicknessArg;
+                case BoundaryCondition::OPEN:
+                    ghostLayerThickness[dim] = 0_r;
+            }
+            MRMD_HOST_CHECK_GREATEREQUAL(ghostLayerThicknessArg, 0_r);
+
+            minGhostCorner[dim] = minCorner[dim] - ghostLayerThickness[dim];
+            maxGhostCorner[dim] = maxCorner[dim] + ghostLayerThickness[dim];
+
+            minInnerCorner[dim] = minCorner[dim] + ghostLayerThickness[dim];
+            maxInnerCorner[dim] = maxCorner[dim] - ghostLayerThickness[dim];
+
+            diameter[dim] = maxCorner[dim] - minCorner[dim];
+            diameterWithGhostLayer[dim] =
+                maxCorner[dim] - minCorner[dim] + 2_r * ghostLayerThickness[dim];
+        }
+    }
 
     Subdomain(const Point3D& minCornerArg,
               const Point3D& maxCornerArg,
@@ -107,6 +144,10 @@ struct Subdomain
     Vector3D diameterWithGhostLayer = {std::numeric_limits<real_t>::signaling_NaN(),
                                        std::numeric_limits<real_t>::signaling_NaN(),
                                        std::numeric_limits<real_t>::signaling_NaN()};
+
+    Kokkos::Array<BoundaryCondition, 3> boundaryConditions = {BoundaryCondition::PERIODIC,
+                                                           BoundaryCondition::PERIODIC,
+                                                           BoundaryCondition::PERIODIC};
 };
 
 void checkInvariants(const Subdomain& subdomain);
