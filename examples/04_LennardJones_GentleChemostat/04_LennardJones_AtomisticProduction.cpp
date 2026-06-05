@@ -21,6 +21,7 @@
 
 #include "action/LennardJones.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
+#include "analysis/CountingPlane.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -139,14 +140,21 @@ void runAtomisticProduction(Config& config)
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
 
+    // set up variables for counting particle flux across the domain
+    analysis::CountingPlane countingPlane({boxCenter[0] + (10_r), boxCenter[1], boxCenter[2]},
+                                          {1_r, 0_r, 0_r});
+    int64_t flux = 0;
+
     // output management
     auto dumpH5MD = io::DumpH5MD("J-Hizzle");
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
         // print table header for simulation statistics
-        util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-        util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        util::printTable(
+            "step", "time", "T", "Ek", "E0", "E", "p", "msd", "flux", "Nlocal", "Nghost");
+        util::printTableSep(
+            "step", "time", "T", "Ek", "E0", "E", "p", "msd", "flux", "Nlocal", "Nghost");
 
         // phase point output setup
         dumpH5MD.open(config.fileOutH5MD, subdomain, atoms);
@@ -155,8 +163,15 @@ void runAtomisticProduction(Config& config)
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
+        // start counting particle flux across the plane
+        countingPlane.startCounting(atoms);
+
+        // integrate equations of motion with local Langevin thermostat during production phase
         maxAtomDisplacement +=
             langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
+
+        // stop counting particle flux across the plane and calculate flux
+        flux += countingPlane.stopCounting(atoms);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
@@ -217,13 +232,14 @@ void runAtomisticProduction(Config& config)
                              E0 + Ek,
                              p,
                              msd,
+                             flux,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
-                  << E0 + Ek << " " << p << " " << msd << " " << atoms.numLocalAtoms << " "
-                  << atoms.numGhostAtoms << " " << std::endl;
+                  << E0 + Ek << " " << p << " " << msd << " " << flux << " " << atoms.numLocalAtoms
+                  << " " << atoms.numGhostAtoms << " " << std::endl;
 
             // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
