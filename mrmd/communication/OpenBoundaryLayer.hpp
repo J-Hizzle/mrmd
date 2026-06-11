@@ -85,6 +85,9 @@ public:
 
         std::cout << "numInsertedAtoms: " << numInsertedAtoms << std::endl;
 
+        atoms.numLocalAtoms += numInsertedAtoms;
+        atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);
+
         // insert new atoms at the end of the array
         auto pos = atoms.getPos();
         auto vel = atoms.getVel();
@@ -94,9 +97,10 @@ public:
         auto charge = atoms.getCharge();
         auto relativeMass = atoms.getRelativeMass();
 
-        auto policy = Kokkos::RangePolicy<>(atoms.numLocalAtoms, atoms.numLocalAtoms + numInsertedAtoms);
+        auto policy = Kokkos::RangePolicy<>(atoms.numLocalAtoms - numInsertedAtoms, atoms.numLocalAtoms);
         auto kernel = KOKKOS_LAMBDA(const idx_t idx)
         {
+            atoms.copy(idx + numInsertedAtoms, idx); // shift existing ghost atoms to make space for new atoms at the end of the array
             for (auto dim = 0; dim < DIMENSIONS; ++dim)
             {
                 pos(idx, dim) = 0_r;  // TODO: sample position of new atom according to density distribution
@@ -109,9 +113,7 @@ public:
             relativeMass(idx) = 1_r / mass(idx);  // TODO: set relative mass of new atom according to relative mass distribution
         };
         Kokkos::parallel_for("fillDomainWithAtoms", policy, kernel);
-
-        atoms.numLocalAtoms += numInsertedAtoms;
-        atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);}
+    }
 };
 }  // namespace communication
 }  // namespace mrmd
