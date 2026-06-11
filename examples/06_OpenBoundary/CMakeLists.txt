@@ -20,3 +20,17 @@ target_link_libraries(06_OpenBoundary
         PRIVATE mrmd CLI11::CLI11
         )
 add_test(NAME Example.06_OpenBoundary COMMAND ./06_OpenBoundary --nsteps 10)
+
+add_executable(06_OutfluxBoundary
+        06_OutfluxBoundary.cpp
+        )
+target_link_libraries(06_OutfluxBoundary
+        PRIVATE mrmd CLI11::CLI11
+        )
+
+add_executable(06_InfluxBoundary
+        06_InfluxBoundary.cpp
+        )
+target_link_libraries(06_InfluxBoundary
+        PRIVATE mrmd CLI11::CLI11
+        )
