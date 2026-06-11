@@ -68,6 +68,50 @@ public:
         atoms.numLocalAtoms = newNumLocalAtoms;
         atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);
     }
+
+    void insertOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
+    {
+        idx_t numInsertedAtoms = 0;
+
+        // sample how many atoms are supposed to be inserted
+
+        for (auto dim = 0; dim < DIMENSIONS; ++dim)
+        {
+            if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
+            {
+                numInsertedAtoms += 1;  // TODO: sample number of atoms to be inserted according to density distribution
+            }
+        }
+
+        std::cout << "numInsertedAtoms: " << numInsertedAtoms << std::endl;
+
+        // insert new atoms at the end of the array
+        auto pos = atoms.getPos();
+        auto vel = atoms.getVel();
+        auto force = atoms.getForce();
+        auto type = atoms.getType();
+        auto mass = atoms.getMass();
+        auto charge = atoms.getCharge();
+        auto relativeMass = atoms.getRelativeMass();
+
+        auto policy = Kokkos::RangePolicy<>(atoms.numLocalAtoms, atoms.numLocalAtoms + numInsertedAtoms);
+        auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+        {
+            for (auto dim = 0; dim < DIMENSIONS; ++dim)
+            {
+                pos(idx, dim) = 0_r;  // TODO: sample position of new atom according to density distribution
+                vel(idx, dim) = 0_r;  // TODO: sample velocity of new atom according to velocity distribution
+                force(idx, dim) = 0_r;
+            }
+            type(idx) = 0;          // TODO: set type of new atom according to type distribution
+            mass(idx) = 1_r;        // TODO: set mass of new atom according to mass distribution
+            charge(idx) = 0_r;      // TODO: set charge of new atom according to charge distribution
+            relativeMass(idx) = 1_r / mass(idx);  // TODO: set relative mass of new atom according to relative mass distribution
+        };
+        Kokkos::parallel_for("fillDomainWithAtoms", policy, kernel);
+
+        atoms.numLocalAtoms += numInsertedAtoms;
+        atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);}
 };
 }  // namespace communication
 }  // namespace mrmd
