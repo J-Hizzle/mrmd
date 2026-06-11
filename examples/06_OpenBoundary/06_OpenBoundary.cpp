@@ -39,6 +39,7 @@
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 #include "initialization.hpp"
+#include "io/DumpGRO.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -90,6 +91,9 @@ struct Config
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
+
+    std::string fileOut = "openBoundary";  ///< base name for output files
+    std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -271,11 +275,23 @@ void runLennardJones_idealGas_localCap(Config& config)
                   << " " << std::endl;
         }
     }
+    if (config.bOutput)
+    {
+        // close statistics file
+        fStat.close();
+        auto time = timer.seconds();
+        std::cout << time << std::endl;
 
-    // close statistics file
-    fStat.close();
-    auto time = timer.seconds();
-    std::cout << time << std::endl;
+        io::dumpGRO(config.fileOutFinalGro,
+                    atoms,
+                    subdomain,
+                    0,
+                    config.resName,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
+    }
 
     // write performance data to file
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
