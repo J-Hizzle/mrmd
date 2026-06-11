@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(00_IdealGas_NVE)
-add_subdirectory(04_LennardJones_IdealGas_LocalCap)
-add_subdirectory(06_OpenBoundary)
+add_executable(06_OpenBoundary
+        06_OpenBoundary.cpp
+        )
+target_link_libraries(06_OpenBoundary
+        PRIVATE mrmd CLI11::CLI11
+        )
+add_test(NAME Example.06_OpenBoundary COMMAND ./06_OpenBoundary --nsteps 10)
