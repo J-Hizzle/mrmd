@@ -58,8 +58,10 @@ struct Subdomain
             {
                 case BoundaryCondition::PERIODIC:
                     ghostLayerThickness[dim] = ghostLayerThicknessArg;
+                    break;
                 case BoundaryCondition::OPEN:
                     ghostLayerThickness[dim] = 0_r;
+                    break;
             }
             MRMD_HOST_CHECK_GREATEREQUAL(ghostLayerThicknessArg, 0_r);
 
