@@ -147,9 +147,8 @@ struct Subdomain
                                        std::numeric_limits<real_t>::signaling_NaN(),
                                        std::numeric_limits<real_t>::signaling_NaN()};
 
-    Kokkos::Array<BoundaryCondition, 3> boundaryConditions = {BoundaryCondition::PERIODIC,
-                                                           BoundaryCondition::PERIODIC,
-                                                           BoundaryCondition::PERIODIC};
+    Kokkos::Array<BoundaryCondition, 3> boundaryConditions = {
+        BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC};
 };
 
 void checkInvariants(const Subdomain& subdomain);
