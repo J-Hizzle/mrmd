@@ -105,9 +105,9 @@ void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
                                             const AXIS& axis)
 {
     auto numberOfAtomsToInsertNegative =
-        1;  // TODO: sample number of atoms to be inserted according to density distribution
+        1000;  // TODO: sample number of atoms to be inserted according to density distribution
     auto numberOfAtomsToInsertPositive =
-        1;  // TODO: sample number of atoms to be inserted according to density distribution
+        1000;  // TODO: sample number of atoms to be inserted according to density distribution
 
     // create atom buffers and copy atoms to be inserted into them
     auto atomsToInsertNegative =
@@ -125,9 +125,9 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                                                    const idx_t numAtoms,
                                                    const bool positive)
 {
+    auto RNG = Kokkos::Random_XorShift1024_Pool<>(1234);
+
     data::Atoms boundaryAtoms(numAtoms);
-    boundaryAtoms.numLocalAtoms = numAtoms;
-    boundaryAtoms.numGhostAtoms = 0;
 
     auto pos = boundaryAtoms.getPos();
     auto vel = boundaryAtoms.getVel();
@@ -160,7 +160,10 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
             }
             else
             {
-                pos(idx, dim) = (subdomain.minCorner[dim] + subdomain.maxCorner[dim]) / 2_r;
+                auto randGen = RNG.get_state();
+                pos(idx, dim) =
+                    randGen.drand() * subdomain.diameter[dim] + subdomain.minCorner[dim];
+                RNG.free_state(randGen);
             }
         }
 
@@ -177,8 +180,9 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
         relativeMass(idx) = mass(idx);  // TODO: set relative mass according to simulation setup
     };
     Kokkos::parallel_for("OpenBoundaryLayer::createBoundaryAtoms", policy, kernel);
-    Kokkos::fence();
 
+    boundaryAtoms.numLocalAtoms = numAtoms;
+    boundaryAtoms.numGhostAtoms = 0;
     return boundaryAtoms;
 }
 }  // namespace communication

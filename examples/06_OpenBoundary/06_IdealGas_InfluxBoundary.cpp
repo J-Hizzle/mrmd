@@ -172,26 +172,26 @@ void runLennardJones_idealGas_localCap(Config& config)
         openBoundaryLayer.insertOpenBoundaryAtoms(atoms, subdomain);
 
         // check if neighbor list needs to be rebuilt
-        if (maxAtomDisplacement >=
-            config.sigma *
-                0.5_r)  // the condition is on half the skin thickness because in principle two
-                        // atoms may both move half the skin thickness towards each other
-        {
-            // reset displacement
-            maxAtomDisplacement = 0_r;
-
-            // reinsert atoms that left the domain according to periodic boundary conditions
-            ghostLayer.exchangeRealAtoms(atoms, subdomain);
-
-            // create ghost atoms in the ghost layer beyond the periodic boundaries
-            ghostLayer.createGhostAtoms(atoms, subdomain);
-        }
-        else
-        {
-            // update ghost atom positions in the ghost layer according to periodic boundary
-            // conditions
-            ghostLayer.updateGhostAtoms(atoms, subdomain);
-        }
+        // if (maxAtomDisplacement >=
+        //    config.sigma *
+        //        0.5_r)  // the condition is on half the skin thickness because in principle two
+        //                // atoms may both move half the skin thickness towards each other
+        //{
+        //    // reset displacement
+        //    maxAtomDisplacement = 0_r;
+        //
+        //    // reinsert atoms that left the domain according to periodic boundary conditions
+        //    ghostLayer.exchangeRealAtoms(atoms, subdomain);
+        //
+        //    // create ghost atoms in the ghost layer beyond the periodic boundaries
+        //    ghostLayer.createGhostAtoms(atoms, subdomain);
+        //}
+        // else
+        //{
+        //    // update ghost atom positions in the ghost layer according to periodic boundary
+        //    // conditions
+        //    ghostLayer.updateGhostAtoms(atoms, subdomain);
+        //}
 
         // integrate equations of motion after force calculation
         langevinIntegrator.postForceIntegrate(atoms, config.dt);
