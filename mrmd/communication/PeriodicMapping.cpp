@@ -35,22 +35,25 @@ void mapIntoDomain(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
         for (auto dim = 0; dim < DIMENSIONS; ++dim)
         {
-            auto& x = pos(idx, dim);
-            if (subdomain.maxCorner[dim] <= x)
+            if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::PERIODIC)
             {
-                x -= subdomain.diameter[dim];
-                x = Kokkos::max(x, subdomain.minCorner[dim]);
-            }
-            if (x < subdomain.minCorner[dim])
-            {
-                x += subdomain.diameter[dim];
+                auto& x = pos(idx, dim);
                 if (subdomain.maxCorner[dim] <= x)
                 {
-                    x = subdomain.minCorner[dim];
+                    x -= subdomain.diameter[dim];
+                    x = Kokkos::max(x, subdomain.minCorner[dim]);
                 }
+                if (x < subdomain.minCorner[dim])
+                {
+                    x += subdomain.diameter[dim];
+                    if (subdomain.maxCorner[dim] <= x)
+                    {
+                        x = subdomain.minCorner[dim];
+                    }
+                }
+                assert(x < subdomain.maxCorner[dim]);
+                assert(subdomain.minCorner[dim] <= x);
             }
-            assert(x < subdomain.maxCorner[dim]);
-            assert(subdomain.minCorner[dim] <= x);
         }
     };
     Kokkos::parallel_for("PeriodicMapping::mapIntoDomain", policy, kernel);

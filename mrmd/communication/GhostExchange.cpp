@@ -151,9 +151,13 @@ IndexView GhostExchange::createGhostAtomsXYZ(data::Atoms& atoms, const data::Sub
     resetCorrespondingRealAtoms(atoms);
     atoms.numGhostAtoms = 0;
 
-    createGhostAtoms(atoms, subdomain, AXIS::X);
-    createGhostAtoms(atoms, subdomain, AXIS::Y);
-    createGhostAtoms(atoms, subdomain, AXIS::Z);
+    for (auto axis = 0; axis < DIMENSIONS; ++axis)
+    {
+        if (subdomain.boundaryConditions[axis] == data::Subdomain::BoundaryCondition::PERIODIC)
+        {
+            createGhostAtoms(atoms, subdomain, static_cast<AXIS>(axis));
+        }
+    }
 
     return correspondingRealAtom_;
 }

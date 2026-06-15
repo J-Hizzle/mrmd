@@ -15,12 +15,11 @@
 
 #pragma once
 
-#include "communication/AccumulateForce.hpp"
-#include "communication/GhostExchange.hpp"
-#include "communication/PeriodicMapping.hpp"
-#include "communication/UpdateGhostAtoms.hpp"
+#include "PositiveNegativeCounter.hpp"
+#include "communication/GhostLayer.hpp"
 #include "data/Atoms.hpp"
 #include "data/Subdomain.hpp"
+#include "util/concatenation.hpp"
 
 namespace mrmd
 {
@@ -29,6 +28,15 @@ namespace communication
 class OpenBoundaryLayer
 {
 public:
+    data::Atoms createBoundaryAtoms(const data::Subdomain& subdomain,
+                                    const AXIS& axis,
+                                    const idx_t numAtoms,
+                                    const bool positive);
+
+    void insertBoundaryAtoms(data::Atoms& atoms,
+                             const data::Subdomain& subdomain,
+                             const AXIS& axis);
+
     void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
         auto pos = atoms.getPos();
@@ -71,49 +79,107 @@ public:
 
     void insertOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
-        idx_t numInsertedAtoms = 0;
+        for (auto boundaryAxis = 0; boundaryAxis < DIMENSIONS; ++boundaryAxis)
+        {
+            if (subdomain.boundaryConditions[boundaryAxis] ==
+                data::Subdomain::BoundaryCondition::OPEN)
+            {
+                insertBoundaryAtoms(atoms, subdomain, static_cast<AXIS>(boundaryAxis));
+            }
+        }
+        // reconstruct ghost layer for the new local atoms
+        communication::GhostLayer ghostLayer;
+        ghostLayer.exchangeRealAtoms(atoms, subdomain);
+        ghostLayer.createGhostAtoms(atoms, subdomain);
+    }
 
-        // sample how many atoms are supposed to be inserted
+    OpenBoundaryLayer() : numberOfAtomsToInsert_("numberOfAtomsToInsert") {}
 
+private:
+    /// number of atoms to insert in each direction
+    Kokkos::View<idx_t[2]> numberOfAtomsToInsert_;
+};
+
+void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
+                                            const data::Subdomain& subdomain,
+                                            const AXIS& axis)
+{
+    auto numberOfAtomsToInsertNegative =
+        1;  // TODO: sample number of atoms to be inserted according to density distribution
+    auto numberOfAtomsToInsertPositive =
+        1;  // TODO: sample number of atoms to be inserted according to density distribution
+
+    // create atom buffers and copy atoms to be inserted into them
+    auto atomsToInsertNegative =
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false);
+    auto atomsToInsertPositive =
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true);
+
+    // concatenate the new atoms with the existing ones
+    util::concatenateRealAtoms(atoms, atomsToInsertNegative);
+    util::concatenateRealAtoms(atoms, atomsToInsertPositive);
+}
+
+data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdomain,
+                                                   const AXIS& axis,
+                                                   const idx_t numAtoms,
+                                                   const bool positive)
+{
+    data::Atoms boundaryAtoms(numAtoms);
+    boundaryAtoms.numLocalAtoms = numAtoms;
+    boundaryAtoms.numGhostAtoms = 0;
+
+    auto pos = boundaryAtoms.getPos();
+    auto vel = boundaryAtoms.getVel();
+    auto force = boundaryAtoms.getForce();
+    auto type = boundaryAtoms.getType();
+    auto mass = boundaryAtoms.getMass();
+    auto charge = boundaryAtoms.getCharge();
+    auto relativeMass = boundaryAtoms.getRelativeMass();
+
+    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
+    {
+        // set position of new atom
         for (auto dim = 0; dim < DIMENSIONS; ++dim)
         {
-            if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
+            if (dim == to_underlying(axis))
             {
-                numInsertedAtoms += 1;  // TODO: sample number of atoms to be inserted according to density distribution
+                if (positive)
+                {
+                    pos(idx, dim) =
+                        subdomain.maxCorner[dim] -
+                        1e-5_r;  // TODO: sample position according to density distribution
+                }
+                else
+                {
+                    pos(idx, dim) =
+                        subdomain.minCorner[dim] +
+                        1e-5_r;  // TODO: sample position according to density distribution
+                }
+            }
+            else
+            {
+                pos(idx, dim) = (subdomain.minCorner[dim] + subdomain.maxCorner[dim]) / 2_r;
             }
         }
 
-        std::cout << "numInsertedAtoms: " << numInsertedAtoms << std::endl;
+        // set other properties of new atom
+        vel(idx, 0) = 0_r;
+        vel(idx, 1) = 0_r;
+        vel(idx, 2) = 0_r;
+        force(idx, 0) = 0_r;
+        force(idx, 1) = 0_r;
+        force(idx, 2) = 0_r;
+        type(idx) = 0;                  // TODO: set type according to simulation setup
+        mass(idx) = 1_r;                // TODO: set mass according to simulation setup
+        charge(idx) = 0_r;              // TODO: set charge according to simulation setup
+        relativeMass(idx) = mass(idx);  // TODO: set relative mass according to simulation setup
+    };
+    Kokkos::parallel_for("OpenBoundaryLayer::createBoundaryAtoms", policy, kernel);
+    Kokkos::fence();
 
-        atoms.numLocalAtoms += numInsertedAtoms;
-        atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);
-
-        // insert new atoms at the end of the array
-        auto pos = atoms.getPos();
-        auto vel = atoms.getVel();
-        auto force = atoms.getForce();
-        auto type = atoms.getType();
-        auto mass = atoms.getMass();
-        auto charge = atoms.getCharge();
-        auto relativeMass = atoms.getRelativeMass();
-
-        auto policy = Kokkos::RangePolicy<>(atoms.numLocalAtoms - numInsertedAtoms, atoms.numLocalAtoms);
-        auto kernel = KOKKOS_LAMBDA(const idx_t idx)
-        {
-            atoms.copy(idx + numInsertedAtoms, idx); // shift existing ghost atoms to make space for new atoms at the end of the array
-            for (auto dim = 0; dim < DIMENSIONS; ++dim)
-            {
-                pos(idx, dim) = 0_r;  // TODO: sample position of new atom according to density distribution
-                vel(idx, dim) = 0_r;  // TODO: sample velocity of new atom according to velocity distribution
-                force(idx, dim) = 0_r;
-            }
-            type(idx) = 0;          // TODO: set type of new atom according to type distribution
-            mass(idx) = 1_r;        // TODO: set mass of new atom according to mass distribution
-            charge(idx) = 0_r;      // TODO: set charge of new atom according to charge distribution
-            relativeMass(idx) = 1_r / mass(idx);  // TODO: set relative mass of new atom according to relative mass distribution
-        };
-        Kokkos::parallel_for("fillDomainWithAtoms", policy, kernel);
-    }
-};
+    return boundaryAtoms;
+}
 }  // namespace communication
 }  // namespace mrmd
