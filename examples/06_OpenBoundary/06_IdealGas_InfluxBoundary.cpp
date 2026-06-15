@@ -61,23 +61,10 @@ struct Config
     static constexpr real_t mass = 1_r;     ///< mass of one atom in reduced units
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
-    static constexpr real_t r_cut = 2.5_r * sigma;         ///< cutoff radius for LJ potential
-    static constexpr real_t r_cap = 0.82417464_r * sigma;  ///< capping radius for LJ potential
-
-    // neighbor list parameters
-    static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
-    static constexpr real_t neighborCutoff = r_cut + skin;  ///< cutoff radius for neighbor list
-    static constexpr real_t cell_ratio =
-        1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
-    static constexpr idx_t estimatedMaxNeighbors =
-        60;  ///< estimated maximum number of neighbors per atom
 
     // system parameters
     static constexpr idx_t numAtoms = 16 * 16 * 16;  ///< number of atoms in the simulation
     real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
-    // equilibration parameters
-    idx_t nstepsEq = 100000;  ///< number of equilibration steps
 
     // thermostat parameters
     real_t temperature =
@@ -107,7 +94,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                                   data::Subdomain::BoundaryCondition::OPEN,
                                   data::Subdomain::BoundaryCondition::PERIODIC,
                                   data::Subdomain::BoundaryCondition::PERIODIC},
-                              config.neighborCutoff);
+                              0_r);
 
     std::cout
         << "boundaryCondition x: "
@@ -186,7 +173,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
-            config.skin *
+            config.sigma *
                 0.5_r)  // the condition is on half the skin thickness because in principle two
                         // atoms may both move half the skin thickness towards each other
         {
@@ -198,17 +185,6 @@ void runLennardJones_idealGas_localCap(Config& config)
 
             // create ghost atoms in the ghost layer beyond the periodic boundaries
             ghostLayer.createGhostAtoms(atoms, subdomain);
-
-            // rebuild neighbor list
-            verletList.build(atoms.getPos(),
-                             0,
-                             atoms.numLocalAtoms,
-                             config.neighborCutoff,
-                             config.cell_ratio,
-                             subdomain.minGhostCorner.data(),
-                             subdomain.maxGhostCorner.data(),
-                             config.estimatedMaxNeighbors);
-            ++rebuildCounter;
         }
         else
         {
