@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,31 +17,8 @@
 
 #include <format>
 
+#include "PositiveNegativeCounter.hpp"
 #include "assert/assert.hpp"
-
-namespace mrmd::communication::impl
-{
-struct PositiveNegativeCounter
-{
-    idx_t positive = 0;
-    idx_t negative = 0;
-
-    KOKKOS_INLINE_FUNCTION
-    PositiveNegativeCounter() = default;
-    KOKKOS_INLINE_FUNCTION
-    PositiveNegativeCounter(const PositiveNegativeCounter& rhs) = default;
-    KOKKOS_INLINE_FUNCTION
-    PositiveNegativeCounter& operator=(const PositiveNegativeCounter& rhs) = default;
-
-    KOKKOS_INLINE_FUNCTION
-    PositiveNegativeCounter& operator+=(const PositiveNegativeCounter& src)
-    {
-        positive += src.positive;
-        negative += src.negative;
-        return *this;
-    }
-};
-}  // namespace mrmd::communication::impl
 
 namespace Kokkos
 {  // reduction identity must be defined in Kokkos namespace
