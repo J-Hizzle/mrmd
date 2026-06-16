@@ -304,7 +304,7 @@ int main(int argc, char* argv[])
     CLI11_PARSE(app, argc, argv);
 
     config.fileOutH5MD = format("{0}.h5md", config.fileOut);
-    config.fileOutFinalGro = format("{0}.gro", config.fileOut);
+    config.fileOutFinalGro = format("{0}_final.gro", config.fileOut);
     config.fileOutFinalH5MD = format("{0}_final.h5md", config.fileOut);
 
     if (config.outputInterval < 0) config.bOutput = false;
