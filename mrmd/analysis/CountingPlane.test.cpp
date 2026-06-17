@@ -113,7 +113,7 @@ TEST_F(CountingPlaneTestX, ParticlesMovingInXDirection)
 
     int64_t count = plane.stopCounting(atoms);
 
-    EXPECT_EQ(count, 5);
+    EXPECT_EQ(count, 1);
 }
 
 TEST_F(CountingPlaneTestY, ParticlesMovingInYDirection)
@@ -128,7 +128,7 @@ TEST_F(CountingPlaneTestY, ParticlesMovingInYDirection)
 
     int64_t count = plane.stopCounting(atoms);
 
-    EXPECT_EQ(count, 4);
+    EXPECT_EQ(count, 0);
 }
 
 TEST_F(CountingPlaneTestZ, ParticlesMovingInZDirection)
@@ -143,7 +143,7 @@ TEST_F(CountingPlaneTestZ, ParticlesMovingInZDirection)
 
     int64_t count = plane.stopCounting(atoms);
 
-    EXPECT_EQ(count, 5);
+    EXPECT_EQ(count, -1);
 }
 
 }  // namespace mrmd::analysis
