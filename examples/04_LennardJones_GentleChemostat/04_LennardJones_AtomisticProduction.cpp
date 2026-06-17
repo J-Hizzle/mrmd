@@ -240,7 +240,10 @@ void runAtomisticProduction(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << msd << " " << flux << " " << atoms.numLocalAtoms
                   << " " << atoms.numGhostAtoms << " " << std::endl;
-
+            
+            // reset flux counter
+            flux = 0;
+            
             // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }

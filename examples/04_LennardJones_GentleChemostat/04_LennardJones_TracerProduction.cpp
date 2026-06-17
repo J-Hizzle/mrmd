@@ -311,6 +311,9 @@ void runTracerProduction(Config& config)
 
                   << atoms.numLocalAtoms << " " << atoms.numGhostAtoms << " " << std::endl;
 
+            // reset flux counter
+            flux = 0;
+
             // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
