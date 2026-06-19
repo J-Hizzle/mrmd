@@ -34,3 +34,10 @@ add_executable(06_IdealGas_InfluxBoundary
 target_link_libraries(06_IdealGas_InfluxBoundary
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(06_IdealGas_FluxBoundary
+        06_IdealGas_FluxBoundary.cpp
+        )
+target_link_libraries(06_IdealGas_FluxBoundary
+        PRIVATE mrmd CLI11::CLI11
+        )

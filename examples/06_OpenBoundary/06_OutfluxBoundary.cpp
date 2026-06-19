@@ -122,7 +122,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     communication::GhostLayer ghostLayer;
 
     // set up open boundary layer for open boundary conditions
-    communication::OpenBoundaryLayer openBoundaryLayer;
+    communication::OpenBoundaryLayer openBoundaryLayer(1234);
 
     // set up neighbor list
     HalfVerletList verletList;

@@ -168,6 +168,9 @@ void runLennardJones_idealGas_localCap(Config& config)
         // integrate equations of motion before force calculation
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
+        // remove atoms that left the domain through the open boundary
+        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
+
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
             atoms, subdomain, config.temperature, rho, config.mass, config.dt);

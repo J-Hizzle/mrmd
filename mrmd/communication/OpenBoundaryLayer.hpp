@@ -17,6 +17,7 @@
 
 #include "PositiveNegativeCounter.hpp"
 #include "communication/GhostLayer.hpp"
+#include "constants.hpp"
 #include "data/Atoms.hpp"
 #include "data/Subdomain.hpp"
 #include "util/concatenation.hpp"
@@ -35,7 +36,11 @@ public:
 
     void insertBoundaryAtoms(data::Atoms& atoms,
                              const data::Subdomain& subdomain,
-                             const AXIS& axis);
+                             const AXIS& axis,
+                             const real_t temperature,
+                             const real_t density,
+                             const real_t mass,
+                             const real_t dt);
 
     void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
@@ -73,41 +78,61 @@ public:
                 ++newNumLocalAtoms;
             }
         }
+
+        atoms.resize(newNumLocalAtoms);
         atoms.numLocalAtoms = newNumLocalAtoms;
-        atoms.resize(atoms.numLocalAtoms + atoms.numGhostAtoms);
+        atoms.numGhostAtoms = 0;
     }
 
-    void insertOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
+    void insertOpenBoundaryAtoms(data::Atoms& atoms,
+                                 const data::Subdomain& subdomain,
+                                 const real_t reservoirTemperature,
+                                 const real_t reservoirDensity,
+                                 const real_t reservoirMass,
+                                 const real_t dt)
     {
         for (auto boundaryAxis = 0; boundaryAxis < DIMENSIONS; ++boundaryAxis)
         {
             if (subdomain.boundaryConditions[boundaryAxis] ==
                 data::Subdomain::BoundaryCondition::OPEN)
             {
-                insertBoundaryAtoms(atoms, subdomain, static_cast<AXIS>(boundaryAxis));
+                insertBoundaryAtoms(atoms,
+                                    subdomain,
+                                    static_cast<AXIS>(boundaryAxis),
+                                    reservoirTemperature,
+                                    reservoirDensity,
+                                    reservoirMass,
+                                    dt);
             }
         }
-        // reconstruct ghost layer for the new local atoms
-        communication::GhostLayer ghostLayer;
-        ghostLayer.exchangeRealAtoms(atoms, subdomain);
-        ghostLayer.createGhostAtoms(atoms, subdomain);
     }
 
-    OpenBoundaryLayer() : numberOfAtomsToInsert_("numberOfAtomsToInsert") {}
+    idx_t sampleNumberOfAtomsToInsert(const data::Subdomain& subdomain,
+                                      const AXIS& axis,
+                                      const real_t reservoirTemperature,
+                                      const real_t reservoirDensity,
+                                      const real_t reservoirMass,
+                                      const real_t dt);
+
+    OpenBoundaryLayer(idx_t seed) : RNG(seed) {};
 
 private:
-    /// number of atoms to insert in each direction
-    Kokkos::View<idx_t[2]> numberOfAtomsToInsert_;
+    Kokkos::Random_XorShift1024_Pool<> RNG{1234};
 };
 
 void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
                                             const data::Subdomain& subdomain,
-                                            const AXIS& axis)
+                                            const AXIS& axis,
+                                            const real_t reservoirTemperature,
+                                            const real_t reservoirDensity,
+                                            const real_t reservoirMass,
+                                            const real_t dt)
 {
-    auto numberOfAtomsToInsertNegative =
-        1000;  // TODO: sample number of atoms to be inserted according to density distribution
-    auto numberOfAtomsToInsertPositive =
-        1000;  // TODO: sample number of atoms to be inserted according to density distribution
+    // sample number of atoms to be inserted according to density distribution
+    auto numberOfAtomsToInsertNegative = sampleNumberOfAtomsToInsert(
+        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
+    auto numberOfAtomsToInsertPositive = sampleNumberOfAtomsToInsert(
+        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
 
     // create atom buffers and copy atoms to be inserted into them
     auto atomsToInsertNegative =
@@ -125,8 +150,6 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                                                    const idx_t numAtoms,
                                                    const bool positive)
 {
-    auto RNG = Kokkos::Random_XorShift1024_Pool<>(1234);
-
     data::Atoms boundaryAtoms(numAtoms);
 
     auto pos = boundaryAtoms.getPos();
@@ -184,6 +207,27 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
     boundaryAtoms.numLocalAtoms = numAtoms;
     boundaryAtoms.numGhostAtoms = 0;
     return boundaryAtoms;
+}
+
+idx_t OpenBoundaryLayer::sampleNumberOfAtomsToInsert(const data::Subdomain& subdomain,
+                                                     const AXIS& axis,
+                                                     const real_t reservoirTemperature,
+                                                     const real_t reservoirDensity,
+                                                     const real_t reservoirMass,
+                                                     const real_t dt)
+{
+    auto rand = RNG.get_state();
+    real_t fractionalNumberOfAtomsToInsert =
+        (reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
+         std::sqrt(reservoirTemperature / (2 * pi * reservoirMass)));
+    idx_t integerNumberOfAtomsToInsert = std::floor(fractionalNumberOfAtomsToInsert);
+    auto randnum = rand.drand();
+    if (randnum < fractionalNumberOfAtomsToInsert - integerNumberOfAtomsToInsert)
+    {
+        ++integerNumberOfAtomsToInsert;
+    }
+    RNG.free_state(rand);
+    return integerNumberOfAtomsToInsert;
 }
 }  // namespace communication
 }  // namespace mrmd
