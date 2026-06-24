@@ -71,17 +71,13 @@ struct Config
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
-    // application regions
-    real_t thermostatRegionMin = 0_r;
-    real_t thermostatRegionMax = 15_r * sigma;
-
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 
-    std::string fileOut = "idealGas_InfluxBoundary";  ///< base name for output files
+    std::string fileOut = "idealGas_fluxBoundary";  ///< base name for output files
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
 };
 
@@ -181,28 +177,6 @@ void runLennardJones_idealGas_localCap(Config& config)
         // create ghost atoms in the ghost layer beyond the periodic boundaries
         ghostLayer.createGhostAtoms(atoms, subdomain);
 
-        // check if neighbor list needs to be rebuilt
-        // if (maxAtomDisplacement >=
-        //    config.sigma *
-        //        0.5_r)  // the condition is on half the skin thickness because in principle two
-        //                // atoms may both move half the skin thickness towards each other
-        //{
-        //    // reset displacement
-        //    maxAtomDisplacement = 0_r;
-        //
-        //    // reinsert atoms that left the domain according to periodic boundary conditions
-        //    ghostLayer.exchangeRealAtoms(atoms, subdomain);
-        //
-        //    // create ghost atoms in the ghost layer beyond the periodic boundaries
-        //    ghostLayer.createGhostAtoms(atoms, subdomain);
-        //}
-        // else
-        //{
-        //    // update ghost atom positions in the ghost layer according to periodic boundary
-        //    // conditions
-        //    ghostLayer.updateGhostAtoms(atoms, subdomain);
-        //}
-
         // integrate equations of motion after force calculation
         langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
@@ -277,11 +251,6 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--temp", config.temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
-
-    app.add_option(
-        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
-    app.add_option(
-        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
 
     CLI11_PARSE(app, argc, argv);
 
