@@ -32,7 +32,9 @@ public:
     data::Atoms createBoundaryAtoms(const data::Subdomain& subdomain,
                                     const AXIS& axis,
                                     const idx_t numAtoms,
-                                    const bool positive);
+                                    const bool positive,
+                                    const real_t reservoirTemperature,
+                                    const real_t reservoirMass);
 
     void insertBoundaryAtoms(data::Atoms& atoms,
                              const data::Subdomain& subdomain,
@@ -136,9 +138,9 @@ void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
 
     // create atom buffers and copy atoms to be inserted into them
     auto atomsToInsertNegative =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false, reservoirTemperature, reservoirMass);
     auto atomsToInsertPositive =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true, reservoirTemperature, reservoirMass);
 
     // concatenate the new atoms with the existing ones
     util::concatenateRealAtoms(atoms, atomsToInsertNegative);
@@ -148,7 +150,9 @@ void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
 data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdomain,
                                                    const AXIS& axis,
                                                    const idx_t numAtoms,
-                                                   const bool positive)
+                                                   const bool positive,
+                                                   const real_t reservoirTemperature,
+                                                   const real_t reservoirMass)
 {
     data::Atoms boundaryAtoms(numAtoms);
 
@@ -163,6 +167,9 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
     {
+        auto randGen = RNG.get_state();
+        auto sigma = std::sqrt(reservoirTemperature / reservoirMass);
+
         // set position of new atom
         for (auto dim = 0; dim < DIMENSIONS; ++dim)
         {
@@ -172,33 +179,37 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                 {
                     pos(idx, dim) =
                         subdomain.maxCorner[dim] -
-                        1e-5_r;  // TODO: sample position according to density distribution
+                        1e-5_r;
+                    
+                    vel(idx, dim) = -sigma * std::abs(randGen.normal());  // set velocity towards the interior of the domain
                 }
                 else
                 {
                     pos(idx, dim) =
                         subdomain.minCorner[dim] +
-                        1e-5_r;  // TODO: sample position according to density distribution
+                        1e-5_r;
+
+                    vel(idx, dim) = sigma * std::abs(randGen.normal());  // set velocity towards the interior of the domain
+
                 }
             }
             else
             {
-                auto randGen = RNG.get_state();
                 pos(idx, dim) =
                     randGen.drand() * subdomain.diameter[dim] + subdomain.minCorner[dim];
-                RNG.free_state(randGen);
+                
+                vel(idx, dim) = sigma * randGen.normal();  // set velocity according to Maxwell-Boltzmann distribution
             }
         }
 
+        RNG.free_state(randGen);
+
         // set other properties of new atom
-        vel(idx, 0) = 0_r;
-        vel(idx, 1) = 0_r;
-        vel(idx, 2) = 0_r;
         force(idx, 0) = 0_r;
         force(idx, 1) = 0_r;
         force(idx, 2) = 0_r;
         type(idx) = 0;                  // TODO: set type according to simulation setup
-        mass(idx) = 1_r;                // TODO: set mass according to simulation setup
+        mass(idx) = reservoirMass;
         charge(idx) = 0_r;              // TODO: set charge according to simulation setup
         relativeMass(idx) = mass(idx);  // TODO: set relative mass according to simulation setup
     };
@@ -216,17 +227,16 @@ idx_t OpenBoundaryLayer::sampleNumberOfAtomsToInsert(const data::Subdomain& subd
                                                      const real_t reservoirMass,
                                                      const real_t dt)
 {
-    auto rand = RNG.get_state();
-    real_t fractionalNumberOfAtomsToInsert =
-        (reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
-         std::sqrt(reservoirTemperature / (2 * pi * reservoirMass)));
+    auto randGen = RNG.get_state();
+    real_t fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
+         std::sqrt(reservoirTemperature / (2 * pi * reservoirMass));
     idx_t integerNumberOfAtomsToInsert = std::floor(fractionalNumberOfAtomsToInsert);
-    auto randnum = rand.drand();
+    auto randnum = randGen.drand();
     if (randnum < fractionalNumberOfAtomsToInsert - integerNumberOfAtomsToInsert)
     {
         ++integerNumberOfAtomsToInsert;
     }
-    RNG.free_state(rand);
+    RNG.free_state(randGen);
     return integerNumberOfAtomsToInsert;
 }
 }  // namespace communication
