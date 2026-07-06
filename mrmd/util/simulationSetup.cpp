@@ -58,5 +58,43 @@ data::Atoms fillDomainWithAtoms(const data::Subdomain& subdomain,
     return atoms;
 }
 
+data::Atoms fillDomainWithThermalizedAtoms(const data::Subdomain& subdomain,
+                                const idx_t numAtoms,
+                                const real_t inputMass,
+                                const real_t temperature)
+{
+    auto RNG = Kokkos::Random_XorShift1024_Pool<>(1234);
+
+    data::Atoms atoms(numAtoms);
+
+    auto pos = atoms.getPos();
+    auto vel = atoms.getVel();
+    auto mass = atoms.getMass();
+    auto type = atoms.getType();
+    auto charge = atoms.getCharge();
+
+    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
+        auto randGen = RNG.get_state();
+        pos(idx, 0) = randGen.drand() * subdomain.diameter[0] + subdomain.minCorner[0];
+        pos(idx, 1) = randGen.drand() * subdomain.diameter[1] + subdomain.minCorner[1];
+        pos(idx, 2) = randGen.drand() * subdomain.diameter[2] + subdomain.minCorner[2];
+
+        vel(idx, 0) = randGen.normal() * std::sqrt(temperature / inputMass);
+        vel(idx, 1) = randGen.normal() * std::sqrt(temperature / inputMass);
+        vel(idx, 2) = randGen.normal() * std::sqrt(temperature / inputMass);
+        RNG.free_state(randGen);
+
+        mass(idx) = inputMass;
+        type(idx) = 0;
+        charge(idx) = 0_r;
+    };
+    Kokkos::parallel_for("fillDomainWithThermalizedAtoms", policy, kernel);
+
+    atoms.numLocalAtoms = numAtoms;
+    atoms.numGhostAtoms = 0;
+    return atoms;
+}
 }  // namespace util
 }  // namespace mrmd
