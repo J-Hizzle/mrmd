@@ -34,7 +34,8 @@ public:
                                     const idx_t numAtoms,
                                     const bool positive,
                                     const real_t reservoirTemperature,
-                                    const real_t reservoirMass);
+                                    const real_t reservoirMass,
+                                    const real_t dt);
 
     void insertBoundaryAtoms(data::Atoms& atoms,
                              const data::Subdomain& subdomain,
@@ -109,7 +110,7 @@ public:
         }
     }
 
-    idx_t sampleNumberOfAtomsToInsert(const data::Subdomain& subdomain,
+    idx_t sampleHalfNumberOfAtomsToInsert(const data::Subdomain& subdomain,
                                       const AXIS& axis,
                                       const real_t reservoirTemperature,
                                       const real_t reservoirDensity,
@@ -131,16 +132,16 @@ void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
                                             const real_t dt)
 {
     // sample number of atoms to be inserted according to density distribution
-    auto numberOfAtomsToInsertNegative = sampleNumberOfAtomsToInsert(
+    auto numberOfAtomsToInsertNegative = sampleHalfNumberOfAtomsToInsert(
         subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
-    auto numberOfAtomsToInsertPositive = sampleNumberOfAtomsToInsert(
+    auto numberOfAtomsToInsertPositive = sampleHalfNumberOfAtomsToInsert(
         subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
 
     // create atom buffers and copy atoms to be inserted into them
     auto atomsToInsertNegative =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false, reservoirTemperature, reservoirMass);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false, reservoirTemperature, reservoirMass, dt);
     auto atomsToInsertPositive =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true, reservoirTemperature, reservoirMass);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true, reservoirTemperature, reservoirMass, dt);
 
     // concatenate the new atoms with the existing ones
     util::concatenateRealAtoms(atoms, atomsToInsertNegative);
@@ -152,7 +153,8 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                                                    const idx_t numAtoms,
                                                    const bool positive,
                                                    const real_t reservoirTemperature,
-                                                   const real_t reservoirMass)
+                                                   const real_t reservoirMass,
+                                                   const real_t dt)
 {
     data::Atoms boundaryAtoms(numAtoms);
 
@@ -169,29 +171,19 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
     {
         auto randGen = RNG.get_state();
         auto sigma = std::sqrt(reservoirTemperature / reservoirMass);
+        auto sign = positive ? -1_r : 1_r;
 
         // set position of new atom
         for (auto dim = 0; dim < DIMENSIONS; ++dim)
         {
             if (dim == to_underlying(axis))
             {
-                if (positive)
-                {
-                    pos(idx, dim) =
-                        subdomain.maxCorner[dim] -
-                        1e-5_r;
-                    
-                    vel(idx, dim) = -sigma * std::abs(randGen.normal());  // set velocity towards the interior of the domain
-                }
-                else
-                {
-                    pos(idx, dim) =
-                        subdomain.minCorner[dim] +
-                        1e-5_r;
+                auto absVel = sigma * std::sqrt(-2_r * std::log(randGen.drand()));  // sample absolute velocity from Rayleigh distribution
+                vel(idx, dim) = sign * absVel;  // set velocity towards the interior of the domain
 
-                    vel(idx, dim) = sigma * std::abs(randGen.normal());  // set velocity towards the interior of the domain
-
-                }
+                auto corner = positive ? subdomain.maxCorner[dim] : subdomain.minCorner[dim];
+                auto offset = randGen.drand() * absVel * dt;  // random position offset 
+                pos(idx, dim) = corner + sign * offset;  // set position of new atom at the boundary with random offset
             }
             else
             {
@@ -220,7 +212,7 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
     return boundaryAtoms;
 }
 
-idx_t OpenBoundaryLayer::sampleNumberOfAtomsToInsert(const data::Subdomain& subdomain,
+idx_t OpenBoundaryLayer::sampleHalfNumberOfAtomsToInsert(const data::Subdomain& subdomain,
                                                      const AXIS& axis,
                                                      const real_t reservoirTemperature,
                                                      const real_t reservoirDensity,
