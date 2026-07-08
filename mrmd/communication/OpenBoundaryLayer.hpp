@@ -35,7 +35,8 @@ public:
                                     const bool positive,
                                     const real_t reservoirTemperature,
                                     const real_t reservoirMass,
-                                    const real_t dt);
+                                    const real_t dt,
+                                    const real_t reservoirFriction);
 
     void insertBoundaryAtoms(data::Atoms& atoms,
                              const data::Subdomain& subdomain,
@@ -43,7 +44,8 @@ public:
                              const real_t temperature,
                              const real_t density,
                              const real_t mass,
-                             const real_t dt);
+                             const real_t dt,
+                             const real_t reservoirFriction);
 
     void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
@@ -92,7 +94,8 @@ public:
                                  const real_t reservoirTemperature,
                                  const real_t reservoirDensity,
                                  const real_t reservoirMass,
-                                 const real_t dt)
+                                 const real_t dt,
+                                 const real_t reservoirFriction = -1_r)
     {
         for (auto boundaryAxis = 0; boundaryAxis < DIMENSIONS; ++boundaryAxis)
         {
@@ -105,7 +108,8 @@ public:
                                     reservoirTemperature,
                                     reservoirDensity,
                                     reservoirMass,
-                                    dt);
+                                    dt,
+                                    reservoirFriction);
             }
         }
     }
@@ -115,7 +119,8 @@ public:
                                       const real_t reservoirTemperature,
                                       const real_t reservoirDensity,
                                       const real_t reservoirMass,
-                                      const real_t dt);
+                                      const real_t dt,
+                                      const real_t reservoirFriction);
 
     OpenBoundaryLayer(idx_t seed) : RNG(seed) {};
 
@@ -129,19 +134,20 @@ void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
                                             const real_t reservoirTemperature,
                                             const real_t reservoirDensity,
                                             const real_t reservoirMass,
-                                            const real_t dt)
+                                            const real_t dt,
+                                            const real_t reservoirFriction)
 {
     // sample number of atoms to be inserted according to density distribution
     auto numberOfAtomsToInsertNegative = sampleHalfNumberOfAtomsToInsert(
-        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
+        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt, reservoirFriction);
     auto numberOfAtomsToInsertPositive = sampleHalfNumberOfAtomsToInsert(
-        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt);
+        subdomain, axis, reservoirTemperature, reservoirDensity, reservoirMass, dt, reservoirFriction);
 
     // create atom buffers and copy atoms to be inserted into them
     auto atomsToInsertNegative =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false, reservoirTemperature, reservoirMass, dt);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertNegative, false, reservoirTemperature, reservoirMass, dt, reservoirFriction);
     auto atomsToInsertPositive =
-        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true, reservoirTemperature, reservoirMass, dt);
+        createBoundaryAtoms(subdomain, axis, numberOfAtomsToInsertPositive, true, reservoirTemperature, reservoirMass, dt, reservoirFriction);
 
     // concatenate the new atoms with the existing ones
     util::concatenateRealAtoms(atoms, atomsToInsertNegative);
@@ -154,7 +160,8 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                                                    const bool positive,
                                                    const real_t reservoirTemperature,
                                                    const real_t reservoirMass,
-                                                   const real_t dt)
+                                                   const real_t dt,
+                                                   const real_t reservoirFriction)
 {
     data::Atoms boundaryAtoms(numAtoms);
 
@@ -178,7 +185,15 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
         {
             if (dim == to_underlying(axis))
             {
-                auto absVel = sigma * std::sqrt(-2_r * std::log(randGen.drand()));  // sample absolute velocity from Rayleigh distribution
+                real_t absVel = 0_r;
+                if (reservoirFriction > 0_r)
+                {
+                    absVel = sigma * std::sqrt(-4_r * std::log(randGen.drand()) / (reservoirFriction * dt));  // sample absolute velocity from effective Rayleigh distribution in diffusive regime
+                }
+                else
+                {
+                    absVel = sigma * std::sqrt(-2_r * std::log(randGen.drand()));  // sample absolute velocity from Rayleigh distribution
+                }
                 vel(idx, dim) = sign * absVel;  // set velocity towards the interior of the domain
 
                 auto corner = positive ? subdomain.maxCorner[dim] : subdomain.minCorner[dim];
@@ -217,11 +232,21 @@ idx_t OpenBoundaryLayer::sampleHalfNumberOfAtomsToInsert(const data::Subdomain& 
                                                      const real_t reservoirTemperature,
                                                      const real_t reservoirDensity,
                                                      const real_t reservoirMass,
-                                                     const real_t dt)
+                                                     const real_t dt,
+                                                     const real_t reservoirFriction)
 {
+    real_t fractionalNumberOfAtomsToInsert = 0_r;
     auto randGen = RNG.get_state();
-    real_t fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
+    if (reservoirFriction > 0_r)
+    {
+        fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
+         std::sqrt(reservoirTemperature / (reservoirFriction * dt * reservoirMass));
+    }
+    else
+    {
+        fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
          std::sqrt(reservoirTemperature / (2 * pi * reservoirMass));
+    }
     idx_t integerNumberOfAtomsToInsert = std::floor(fractionalNumberOfAtomsToInsert);
     auto randnum = randGen.drand();
     if (randnum < fractionalNumberOfAtomsToInsert - integerNumberOfAtomsToInsert)

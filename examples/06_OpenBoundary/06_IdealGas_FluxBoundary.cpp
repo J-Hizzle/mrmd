@@ -169,7 +169,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperature, rho, config.mass, config.dt);
+            atoms, subdomain, config.temperature, rho, config.mass, config.dt, config.gamma);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);
