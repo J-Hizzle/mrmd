@@ -24,11 +24,10 @@
 #include <iostream>
 
 #include "Cabana_NeighborList.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -54,7 +53,7 @@ struct Config
 {
     // simulation time parameters
     idx_t nsteps = 400001;               ///< number of steps to simulate
-    static constexpr real_t dt = 0.002;  ///< time step size in reduced units
+    real_t dt = 0.002;  ///< time step size in reduced units
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -84,7 +83,11 @@ struct Config
     // thermostat parameters
     real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+
+    // chemostat parameters
+    real_t reservoirDensityFeedback =
+        0.002_r;  ///< feedback gain for reservoir density control (0 disables control)
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -107,6 +110,30 @@ void runLennardJones_idealGas_localCap(Config& config)
                                   data::Subdomain::BoundaryCondition::PERIODIC},
                               config.r_cut);
 
+    std::cout
+        << "boundaryCondition x: "
+        << static_cast<typename std::underlying_type<data::Subdomain::BoundaryCondition>::type>(
+               subdomain.boundaryConditions[0])
+        << std::endl;
+    std::cout
+        << "boundaryCondition y: "
+        << static_cast<typename std::underlying_type<data::Subdomain::BoundaryCondition>::type>(
+               subdomain.boundaryConditions[1])
+        << std::endl;
+    std::cout
+        << "boundaryCondition z: "
+        << static_cast<typename std::underlying_type<data::Subdomain::BoundaryCondition>::type>(
+               subdomain.boundaryConditions[2])
+        << std::endl;
+
+    std::cout << "maxGhostCorner x: " << subdomain.maxGhostCorner[0] << std::endl;
+    std::cout << "maxGhostCorner y: " << subdomain.maxGhostCorner[1] << std::endl;
+    std::cout << "maxGhostCorner z: " << subdomain.maxGhostCorner[2] << std::endl;
+
+    std::cout << "ghostLayerThickness x: " << subdomain.ghostLayerThickness[0] << std::endl;
+    std::cout << "ghostLayerThickness y: " << subdomain.ghostLayerThickness[1] << std::endl;
+    std::cout << "ghostLayerThickness z: " << subdomain.ghostLayerThickness[2] << std::endl;
+
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
 
@@ -115,8 +142,9 @@ void runLennardJones_idealGas_localCap(Config& config)
         util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
 
     // calculate and print initial density
-    auto rho = real_c(atoms.numLocalAtoms) / volume;
-    std::cout << "rho: " << rho << std::endl;
+    auto rhoTarget = real_c(atoms.numLocalAtoms) / volume;
+    auto rhoReservoir = rhoTarget;
+    std::cout << "rho target: " << rhoTarget << std::endl;
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -147,14 +175,14 @@ void runLennardJones_idealGas_localCap(Config& config)
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
 
     // set up thermostat for temperature control during equilibration
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
 
     // print table header for simulation statistics
-    util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost");
-    util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost");
+    util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rhoReservoir");
+    util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rhoReservoir");
 
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
@@ -163,89 +191,48 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
         // remove atoms that left the domain through the open boundary
-        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain, config.dt);
+        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
 
-        // check if neighbor list needs to be rebuilt
-        if (maxAtomDisplacement >=
-            config.skin *
-                0.5_r)  // the condition is on half the skin thickness because in principle two
-                        // atoms may both move half the skin thickness towards each other
-        {
-            // reset displacement
-            maxAtomDisplacement = 0_r;
+        const auto rhoInstant = real_c(atoms.numLocalAtoms) / volume;
+        rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
+        rhoReservoir = std::max(0_r, rhoReservoir);
 
-            // reinsert atoms that left the domain according to periodic boundary conditions
-            ghostLayer.exchangeRealAtoms(atoms, subdomain);
+        // insert atoms that entered the domain through the open boundary
+        openBoundaryLayer.insertOpenBoundaryAtoms(
+            atoms, subdomain, config.temperature, rhoReservoir, config.mass, config.dt);
 
-            // create ghost atoms in the ghost layer beyond the periodic boundaries
-            ghostLayer.createGhostAtoms(atoms, subdomain);
+        // reset displacement
+        maxAtomDisplacement = 0_r;
 
-            // rebuild neighbor list
-            verletList.build(atoms.getPos(),
-                             0,
-                             atoms.numLocalAtoms,
-                             config.neighborCutoff,
-                             config.cell_ratio,
-                             subdomain.minGhostCorner.data(),
-                             subdomain.maxGhostCorner.data(),
-                             config.estimatedMaxNeighbors);
-            ++rebuildCounter;
-        }
-        else
-        {
-            // update ghost atom positions in the ghost layer according to periodic boundary
-            // conditions
-            ghostLayer.updateGhostAtoms(atoms, subdomain);
-        }
+        // reinsert atoms that left the domain according to periodic boundary conditions
+        ghostLayer.exchangeRealAtoms(atoms, subdomain);
+
+        // create ghost atoms in the ghost layer beyond the periodic boundaries
+        ghostLayer.createGhostAtoms(atoms, subdomain);
+
+        // rebuild neighbor list
+        verletList.build(atoms.getPos(),
+                            0,
+                            atoms.numLocalAtoms,
+                            config.neighborCutoff,
+                            config.cell_ratio,
+                            subdomain.minGhostCorner.data(),
+                            subdomain.maxGhostCorner.data(),
+                            config.estimatedMaxNeighbors);
+        ++rebuildCounter;
 
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
-        // check if still during equilibration phase
-        if (step <= config.nstepsEq)
-        {
-            // apply capped LJ potential in the whole domain during equilibration
-            lennardJonesCap.apply(atoms, verletList);
-        }
-        else
-        {
-            // compute and apply forces
-            lennardJones.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInNoCapRegion(x1, y1, z1) || isInNoCapRegion(x2, y2, z2);
-                });
-            lennardJonesCap.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInCappingRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2);
-                });
-        }
-
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
 
-        // apply Langevin thermostat for temperature control
-        langevinThermostat.apply(atoms);
-
         // integrate equations of motion after force calculation
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))
@@ -267,12 +254,14 @@ void runLennardJones_idealGas_localCap(Config& config)
                              E0 + Ek,
                              p,
                              atoms.numLocalAtoms,
-                             atoms.numGhostAtoms);
+                             atoms.numGhostAtoms,
+                             rhoInstant,
+                             rhoReservoir);
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
-                  << " " << std::endl;
+                  << " " << rhoInstant << " " << rhoReservoir << std::endl;
         }
     }
     if (config.bOutput)
@@ -312,14 +301,16 @@ int main(int argc, char* argv[])  // NOLINT
     // initialize simulation configuration with command line interface
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
-    app.add_option("-n,--nsteps", config.nsteps, "total number of simulation steps");
-    app.add_option("-L,--length", config.Lx, "simulation box diameter");
-    app.add_option("-e,--numeq", config.nstepsEq, "number of equilibration steps");
-    app.add_option(
-        "-T,--temperature",
-        config.temperature,
-        "temperature of the Langevin thermostat (negative numbers deactivate the thermostat)");
+    app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
+    app.add_option("-d,--tstep", config.dt, "time step");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
+
+    app.add_option("--temp", config.temperature, "target temperature");
+    app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
+    app.add_option("--density-feedback",
+                   config.reservoirDensityFeedback,
+                   "feedback gain for reservoir density control (0 disables)");
     CLI11_PARSE(app, argc, argv);
 
     // reset output parameter if output interval is negative
