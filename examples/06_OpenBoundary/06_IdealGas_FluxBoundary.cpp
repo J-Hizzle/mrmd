@@ -165,11 +165,11 @@ void runLennardJones_idealGas_localCap(Config& config)
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
         // remove atoms that left the domain through the open boundary
-        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
+        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain, config.dt);
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperature, rho, config.mass, config.dt, config.gamma);
+            atoms, subdomain, config.temperature, rho, config.mass, config.dt);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);

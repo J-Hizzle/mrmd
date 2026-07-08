@@ -47,9 +47,12 @@ public:
                              const real_t dt,
                              const real_t reservoirFriction);
 
-    void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
+    void removeOpenBoundaryAtoms(data::Atoms& atoms,
+                                 const data::Subdomain& subdomain,
+                                 const real_t dt = -1_r)
     {
         auto pos = atoms.getPos();
+        auto vel = atoms.getVel();
         auto type = atoms.getType();
         auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
         auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
@@ -58,8 +61,18 @@ public:
             {
                 if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
                 {
-                    auto x = pos(idx, dim);
-                    if (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim])
+                    const auto x = pos(idx, dim);
+                    bool remove = (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim]);
+
+                    if (!remove && dt > 0_r)
+                    {
+                        // preForceIntegrate advances position in two half-drifts. Reconstruct the
+                        // midpoint to also catch atoms that left the domain during the second half-step.
+                        const auto xMid = x - 0.5_r * dt * vel(idx, dim);
+                        remove = (xMid > subdomain.maxCorner[dim] || xMid < subdomain.minCorner[dim]);
+                    }
+
+                    if (remove)
                     {
                         type(idx) = -1;  // mark atom for deletion by setting type to -1
                         break;
