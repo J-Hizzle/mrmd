@@ -70,6 +70,8 @@ struct Config
     real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    real_t reservoirDensityFeedback =
+        0.002_r;  ///< feedback gain for reservoir density control (0 disables control)
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -124,8 +126,9 @@ void runLennardJones_idealGas_localCap(Config& config)
         util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
 
     // calculate and print initial density
-    auto rho = real_c(atoms.numLocalAtoms) / volume;
-    std::cout << "rho: " << rho << std::endl;
+    auto rhoTarget = real_c(atoms.numLocalAtoms) / volume;
+    auto rhoReservoir = rhoTarget;
+    std::cout << "rho target: " << rhoTarget << std::endl;
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -187,9 +190,13 @@ void runLennardJones_idealGas_localCap(Config& config)
         // remove atoms that left the domain through the open boundary
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain, previousPos, config.dt);
 
+        const auto rhoInstant = real_c(atoms.numLocalAtoms) / volume;
+        rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
+        rhoReservoir = std::max(0_r, rhoReservoir);
+
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperature, rho, config.mass, config.dt);
+            atoms, subdomain, config.temperature, rhoReservoir, config.mass, config.dt);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);
@@ -271,6 +278,9 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--temp", config.temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
+    app.add_option("--rho-feedback",
+                   config.reservoirDensityFeedback,
+                   "feedback gain for reservoir density control (0 disables)");
 
     CLI11_PARSE(app, argc, argv);
 
