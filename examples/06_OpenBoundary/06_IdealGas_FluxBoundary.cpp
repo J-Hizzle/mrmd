@@ -161,34 +161,14 @@ void runLennardJones_idealGas_localCap(Config& config)
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
 
-    VectorView previousPos("previousPos", atoms.size());
-
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        if (previousPos.extent(0) < atoms.size())
-        {
-            previousPos = VectorView("previousPos", atoms.size());
-        }
-
-        {
-            auto pos = atoms.getPos();
-            auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
-            auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
-            {
-                previousPos(idx, 0) = pos(idx, 0);
-                previousPos(idx, 1) = pos(idx, 1);
-                previousPos(idx, 2) = pos(idx, 2);
-            };
-            Kokkos::parallel_for("snapshotPreviousPositions", policy, kernel);
-            Kokkos::fence();
-        }
-
         // integrate equations of motion before force calculation
         maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
         // remove atoms that left the domain through the open boundary
-        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain, previousPos, config.dt);
+        openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
 
         const auto rhoInstant = real_c(atoms.numLocalAtoms) / volume;
         rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
@@ -278,7 +258,7 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--temp", config.temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
-    app.add_option("--rho-feedback",
+    app.add_option("--density-feedback",
                    config.reservoirDensityFeedback,
                    "feedback gain for reservoir density control (0 disables)");
 

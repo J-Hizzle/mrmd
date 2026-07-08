@@ -47,12 +47,9 @@ public:
                              const real_t dt,
                              const real_t reservoirFriction);
 
-    void removeOpenBoundaryAtoms(data::Atoms& atoms,
-                                 const data::Subdomain& subdomain,
-                                 const real_t dt = -1_r)
+    void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
         auto pos = atoms.getPos();
-        auto vel = atoms.getVel();
         auto type = atoms.getType();
         auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
         auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
@@ -61,18 +58,8 @@ public:
             {
                 if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
                 {
-                    const auto x = pos(idx, dim);
-                    bool remove = (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim]);
-
-                    if (!remove && dt > 0_r)
-                    {
-                        // preForceIntegrate advances position in two half-drifts. Reconstruct the
-                        // midpoint to also catch atoms that left the domain during the second half-step.
-                        const auto xMid = x - 0.5_r * dt * vel(idx, dim);
-                        remove = (xMid > subdomain.maxCorner[dim] || xMid < subdomain.minCorner[dim]);
-                    }
-
-                    if (remove)
+                    auto x = pos(idx, dim);
+                    if (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim])
                     {
                         type(idx) = -1;  // mark atom for deletion by setting type to -1
                         break;
@@ -81,74 +68,6 @@ public:
             }
         };
         Kokkos::parallel_for("OpenBoundaryLayer::removeOpenBoundaryAtoms", policy, kernel);
-        Kokkos::fence();
-
-        // remove atoms marked for deletion by copying the remaining atoms to the front of the array
-        idx_t newNumLocalAtoms = 0;
-        for (idx_t idx = 0; idx < atoms.numLocalAtoms; ++idx)
-        {
-            if (type(idx) != -1)
-            {
-                if (idx != newNumLocalAtoms)
-                {
-                    atoms.copy(newNumLocalAtoms, idx);
-                }
-                ++newNumLocalAtoms;
-            }
-        }
-
-        atoms.resize(newNumLocalAtoms);
-        atoms.numLocalAtoms = newNumLocalAtoms;
-        atoms.numGhostAtoms = 0;
-    }
-
-    void removeOpenBoundaryAtoms(data::Atoms& atoms,
-                                 const data::Subdomain& subdomain,
-                                 const VectorView& previousPos,
-                                 const real_t dt = -1_r)
-    {
-        auto pos = atoms.getPos();
-        auto vel = atoms.getVel();
-        auto type = atoms.getType();
-        auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
-        auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
-        {
-            for (auto dim = 0; dim < DIMENSIONS; ++dim)
-            {
-                if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
-                {
-                    const auto x = pos(idx, dim);
-                    const auto xPrev = previousPos(idx, dim);
-
-                    bool remove = (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim]);
-
-                    if (!remove)
-                    {
-                        // Crossing test over the full timestep segment from pre-step to post-step.
-                        const bool crossedPositive =
-                            (xPrev <= subdomain.maxCorner[dim] && x > subdomain.maxCorner[dim]);
-                        const bool crossedNegative =
-                            (xPrev >= subdomain.minCorner[dim] && x < subdomain.minCorner[dim]);
-                        remove = crossedPositive || crossedNegative;
-                    }
-
-                    if (!remove && dt > 0_r)
-                    {
-                        // Also test the split-step midpoint to catch recrossings created by
-                        // the OU/noise kick between the two half-drifts in preForceIntegrate.
-                        const auto xMid = x - 0.5_r * dt * vel(idx, dim);
-                        remove = (xMid > subdomain.maxCorner[dim] || xMid < subdomain.minCorner[dim]);
-                    }
-
-                    if (remove)
-                    {
-                        type(idx) = -1;  // mark atom for deletion by setting type to -1
-                        break;
-                    }
-                }
-            }
-        };
-        Kokkos::parallel_for("OpenBoundaryLayer::removeOpenBoundaryAtomsWithPreviousPos", policy, kernel);
         Kokkos::fence();
 
         // remove atoms marked for deletion by copying the remaining atoms to the front of the array

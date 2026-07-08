@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(06_OpenBoundary
-        06_OpenBoundary.cpp
+add_executable(06_LennardJones_FluxBoundary
+        06_LennardJones_FluxBoundary.cpp
         )
-target_link_libraries(06_OpenBoundary
+target_link_libraries(06_LennardJones_FluxBoundary
         PRIVATE mrmd CLI11::CLI11
         )
-add_test(NAME Example.06_OpenBoundary COMMAND ./06_OpenBoundary --nsteps 10)
+add_test(NAME Example.06_LennardJones_FluxBoundary COMMAND ./06_LennardJones_FluxBoundary --nsteps 10)
 
 add_executable(06_OutfluxBoundary
         06_OutfluxBoundary.cpp
