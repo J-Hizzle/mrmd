@@ -194,8 +194,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     Kokkos::Timer timer;
 
     // print table header for simulation statistics
-    util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rhoReservoir");
-    util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rhoReservoir");
+    util::printTable<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rho res");
+    util::printTableSep<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rho res");
 
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
@@ -269,7 +269,6 @@ void runLennardJones_idealGas_localCap(Config& config)
                 config.smoothingInverseDamping, config.smoothingRange);
         }
 
-
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
@@ -292,7 +291,7 @@ void runLennardJones_idealGas_localCap(Config& config)
             auto p = analysis::getPressure(atoms, subdomain);
 
             // print statistics to console
-            util::printTable(step,
+            util::printTable<4>(step,
                              timer.seconds(),
                              T,
                              Ek,
