@@ -50,44 +50,78 @@ public:
 
     void removeOpenBoundaryAtoms(data::Atoms& atoms, const data::Subdomain& subdomain)
     {
+        // capture all slices upfront so both kernels share the same views
         auto pos = atoms.getPos();
+        auto vel = atoms.getVel();
+        auto force = atoms.getForce();
         auto type = atoms.getType();
-        auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
-        auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
-        {
-            for (auto dim = 0; dim < DIMENSIONS; ++dim)
+        auto mass = atoms.getMass();
+        auto charge = atoms.getCharge();
+        auto relativeMass = atoms.getRelativeMass();
+
+        // single-pass: inline the boundary check directly in the scan predicate,
+        // eliminating a separate mark kernel + fence + full data pass
+        Kokkos::View<idx_t*> survivorSrcIndices("survivorSrcIndices", atoms.numLocalAtoms);
+        idx_t newNumLocalAtoms = 0;
+        Kokkos::parallel_scan(
+            "OpenBoundaryLayer::removeOpenBoundaryAtoms",
+            Kokkos::RangePolicy<>(0, atoms.numLocalAtoms),
+            KOKKOS_LAMBDA(const idx_t idx, idx_t& update, const bool finalPass)
             {
-                if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
+                bool keep = true;
+                for (auto dim = 0; dim < DIMENSIONS; ++dim)
                 {
-                    auto x = pos(idx, dim);
-                    if (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim])
+                    if (subdomain.boundaryConditions[dim] == data::Subdomain::BoundaryCondition::OPEN)
                     {
-                        type(idx) = -1;  // mark atom for deletion by setting type to -1
-                        break;
+                        const auto x = pos(idx, dim);
+                        if (x > subdomain.maxCorner[dim] || x < subdomain.minCorner[dim])
+                        {
+                            keep = false;
+                            break;
+                        }
                     }
                 }
-            }
-        };
-        Kokkos::parallel_for("OpenBoundaryLayer::removeOpenBoundaryAtoms", policy, kernel);
+                if (finalPass && keep)
+                {
+                    survivorSrcIndices(update) = idx;
+                }
+                if (keep) ++update;
+            },
+            newNumLocalAtoms);
         Kokkos::fence();
 
-        // remove atoms marked for deletion by copying the remaining atoms to the front of the array
-        idx_t newNumLocalAtoms = 0;
-        for (idx_t idx = 0; idx < atoms.numLocalAtoms; ++idx)
-        {
-            if (type(idx) != -1)
-            {
-                if (idx != newNumLocalAtoms)
-                {
-                    atoms.copy(newNumLocalAtoms, idx);
-                }
-                ++newNumLocalAtoms;
-            }
-        }
+        // scatter surviving atoms into a compact temporary array
+        data::Atoms tempAtoms(newNumLocalAtoms);
+        auto tempPos = tempAtoms.getPos();
+        auto tempVel = tempAtoms.getVel();
+        auto tempForce = tempAtoms.getForce();
+        auto tempType = tempAtoms.getType();
+        auto tempMass = tempAtoms.getMass();
+        auto tempCharge = tempAtoms.getCharge();
+        auto tempRelativeMass = tempAtoms.getRelativeMass();
 
-        atoms.resize(newNumLocalAtoms);
-        atoms.numLocalAtoms = newNumLocalAtoms;
-        atoms.numGhostAtoms = 0;
+        Kokkos::parallel_for(
+            "OpenBoundaryLayer::scatterSurvivors",
+            Kokkos::RangePolicy<>(0, newNumLocalAtoms),
+            KOKKOS_LAMBDA(const idx_t newIdx)
+            {
+                const idx_t srcIdx = survivorSrcIndices(newIdx);
+                for (auto dim = 0; dim < DIMENSIONS; ++dim)
+                {
+                    tempPos(newIdx, dim) = pos(srcIdx, dim);
+                    tempVel(newIdx, dim) = vel(srcIdx, dim);
+                    tempForce(newIdx, dim) = force(srcIdx, dim);
+                }
+                tempType(newIdx) = type(srcIdx);
+                tempMass(newIdx) = mass(srcIdx);
+                tempCharge(newIdx) = charge(srcIdx);
+                tempRelativeMass(newIdx) = relativeMass(srcIdx);
+            });
+        Kokkos::fence();
+
+        tempAtoms.numLocalAtoms = newNumLocalAtoms;
+        tempAtoms.numGhostAtoms = 0;
+        data::deep_copy(atoms, tempAtoms);
     }
 
     void insertOpenBoundaryAtoms(data::Atoms& atoms,
