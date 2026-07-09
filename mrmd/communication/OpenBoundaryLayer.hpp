@@ -35,7 +35,10 @@ public:
                                     const bool positive,
                                     const real_t reservoirTemperature,
                                     const real_t reservoirMass,
-                                    const real_t dt);
+                                    const real_t dt,
+                                    const idx_t typeArg = 0,
+                                    const real_t chargeArg = 0_r,
+                                    const real_t relativeMassArg = 1_r);
 
     void insertBoundaryAtoms(data::Atoms& atoms,
                              const data::Subdomain& subdomain,
@@ -154,7 +157,10 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
                                                    const bool positive,
                                                    const real_t reservoirTemperature,
                                                    const real_t reservoirMass,
-                                                   const real_t dt)
+                                                   const real_t dt,
+                                                   const idx_t typeArg,
+                                                   const real_t chargeArg,
+                                                   const real_t relativeMassArg)
 {
     data::Atoms boundaryAtoms(numAtoms);
 
@@ -201,10 +207,10 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
         force(idx, 0) = 0_r;
         force(idx, 1) = 0_r;
         force(idx, 2) = 0_r;
-        type(idx) = 0;                  // TODO: set type according to simulation setup
+        type(idx) = typeArg;
         mass(idx) = reservoirMass;
-        charge(idx) = 0_r;              // TODO: set charge according to simulation setup
-        relativeMass(idx) = mass(idx);  // TODO: set relative mass according to simulation setup
+        charge(idx) = chargeArg;
+        relativeMass(idx) = relativeMassArg;
     };
     Kokkos::parallel_for("OpenBoundaryLayer::createBoundaryAtoms", policy, kernel);
 
