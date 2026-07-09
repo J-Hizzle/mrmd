@@ -281,7 +281,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         Cabana::deep_copy(force, 0_r);
 
         // calculate and apply forces
-        //lennardJones.apply(atoms, verletList);
+        lennardJones.apply(atoms, verletList);
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
