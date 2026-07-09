@@ -45,6 +45,7 @@
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
+#include "util/IsInSymmetricSlab.hpp"
 
 using namespace mrmd;
 
@@ -83,6 +84,8 @@ struct Config
     real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    real_t thermostatRegionMin = 13.5_r * sigma;
+    real_t thermostatRegionMax = 15_r * sigma;
 
     // chemostat parameters
     real_t reservoirDensityFeedback =
@@ -169,8 +172,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, 0_r);
-    action::LennardJones lennardJonesCap(config.r_cut, config.sigma, config.epsilon, config.r_cap);
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -181,6 +183,11 @@ void runLennardJones_idealGas_localCap(Config& config)
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
+
+    // set up application regions
+    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                 config.thermostatRegionMin,
+                                                 config.thermostatRegionMax);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rhoTarget},
@@ -211,7 +218,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         // remove atoms that left the domain through the open boundary
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
@@ -273,6 +280,9 @@ void runLennardJones_idealGas_localCap(Config& config)
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
+        // calculate and apply forces
+        //lennardJones.apply(atoms, verletList);
+
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
 
@@ -283,7 +293,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJones.getEnergy() + lennardJonesCap.getEnergy()) /
+            auto E0 = (lennardJones.getEnergy()) /
                       real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
@@ -358,6 +368,10 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--density-feedback",
                    config.reservoirDensityFeedback,
                    "feedback gain for reservoir density control (0 disables)");
+    app.add_option(
+        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
+    app.add_option(
+        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
