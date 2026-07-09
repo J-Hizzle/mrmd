@@ -37,8 +37,8 @@
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 #include "initialization.hpp"
+#include "io/DumpGRO.hpp"
 #include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
 
@@ -73,14 +73,10 @@ struct Config
 
     // system parameters
     static constexpr idx_t numAtoms = 16 * 16 * 16;  ///< number of atoms in the simulation
-    real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
-    // equilibration parameters
-    idx_t nstepsEq = 100000;  ///< number of equilibration steps
+    real_t Lx = 20_r * sigma;                        ///< box edge length
 
     // thermostat parameters
-    real_t temperature =
-        1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
+    real_t temperature = 1.5_r;  ///< target temperature for thermostat in reduced units
     static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // output parameters
@@ -88,17 +84,19 @@ struct Config
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
+
+    std::string fileOut = "lennardJonesNVT";  ///< base name for output files
+    std::string fileOutFinalGRO = format("{0}_final.gro", fileOut);
 };
 
-void runLennardJones_idealGas_localCap(Config& config)
+void runLennardJonesNVT(Config& config)
 {
     // initialize simulation domain
-    data::Subdomain subdomain({0_r, 0_r, 0_r},
-                              {config.Lx, config.Lx, config.Lx},
-                              {0_r, Config::neighborCutoff, Config::neighborCutoff});
+    auto subdomain =
+        data::Subdomain({0_r, 0_r, 0_r}, {config.Lx, config.Lx, config.Lx}, config.neighborCutoff);
 
     // calculate volume of the simulation domain
-    const auto volume = subdomain.getVolume();
+    const auto volume = subdomain.diameter[0] * subdomain.diameter[1] * subdomain.diameter[2];
 
     // initialize atoms randomly in the domain
     auto atoms =
@@ -117,23 +115,9 @@ void runLennardJones_idealGas_localCap(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, 0_r);
-    action::LennardJones lennardJonesCap(config.r_cut, config.sigma, config.epsilon, config.r_cap);
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
-    // calculate and print box center coordinates
-    const auto boxCenter = subdomain.getCenter();
-
-    std::cout << "x center: " << boxCenter[0] << std::endl;
-    std::cout << "y center: " << boxCenter[1] << std::endl;
-    std::cout << "z center: " << boxCenter[2] << std::endl;
-
-    // set up different interaction regions for capped and bare LJ potential
-    util::IsInSymmetricSlab isInNoCapRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
-    util::IsInSymmetricSlab isInCappingRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
-
-    // set up thermostat for temperature control during equilibration
+    // set up thermostat for temperature control
     action::VelocityVerletLangevinThermostat integrator(config.gamma, config.temperature);
 
     // set up timer for runtime measurement
@@ -157,6 +141,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         // integrate equations of motion before force calculation
         maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
 
+        // reinsert atoms that left the domain according to periodic boundary conditions
+        ghostLayer.exchangeRealAtoms(atoms, subdomain);
+
+        // create ghost atoms in the ghost layer beyond the periodic boundaries
+        ghostLayer.createGhostAtoms(atoms, subdomain);
+
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
             config.skin *
@@ -165,12 +155,6 @@ void runLennardJones_idealGas_localCap(Config& config)
         {
             // reset displacement
             maxAtomDisplacement = 0_r;
-
-            // reinsert atoms that left the domain according to periodic boundary conditions
-            ghostLayer.exchangeRealAtoms(atoms, subdomain);
-
-            // create ghost atoms in the ghost layer beyond the periodic boundaries
-            ghostLayer.createGhostAtoms(atoms, subdomain);
 
             // rebuild neighbor list
             verletList.build(atoms.getPos(),
@@ -183,49 +167,13 @@ void runLennardJones_idealGas_localCap(Config& config)
                              config.estimatedMaxNeighbors);
             ++rebuildCounter;
         }
-        else
-        {
-            // update ghost atom positions in the ghost layer according to periodic boundary
-            // conditions
-            ghostLayer.updateGhostAtoms(atoms, subdomain);
-        }
 
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
-        // check if still during equilibration phase
-        if (step <= config.nstepsEq)
-        {
-            // apply capped LJ potential in the whole domain during equilibration
-            lennardJonesCap.apply(atoms, verletList);
-        }
-        else
-        {
-            // compute and apply forces
-            lennardJones.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInNoCapRegion(x1, y1, z1) || isInNoCapRegion(x2, y2, z2);
-                });
-            lennardJonesCap.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInCappingRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2);
-                });
-        }
+        // compute and apply forces
+        lennardJones.apply(atoms, verletList);
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
@@ -237,8 +185,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJones.getEnergy() + lennardJonesCap.getEnergy()) /
-                      real_c(atoms.numLocalAtoms);
+            auto E0 = lennardJones.getEnergy() / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -266,8 +213,24 @@ void runLennardJones_idealGas_localCap(Config& config)
         }
     }
 
+    if (config.bOutput)
+    {
+        // final microstates output
+        io::dumpGRO(config.fileOutFinalGRO,
+                    atoms,
+                    subdomain,
+                    real_c(config.nsteps) * config.dt,
+                    config.fileOutFinalGRO,
+                    config.resName,
+                    config.typeNames,
+                    false,
+                    true);
+    }
+
     // close statistics file
     fStat.close();
+
+    // print performance data
     auto time = timer.seconds();
     std::cout << time << std::endl;
 
@@ -281,7 +244,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
 int main(int argc, char* argv[])  // NOLINT
 {
-    // initialize Kokkos
+    // initialize Kokkos environment
     Kokkos::ScopeGuard scope_guard(argc, argv);
 
     // print Kokkos execution space
@@ -289,10 +252,9 @@ int main(int argc, char* argv[])  // NOLINT
 
     // initialize simulation configuration with command line interface
     Config config;
-    CLI::App app{"Lennard Jones Fluid benchmark application"};
+    CLI::App app{"Lennard Jones Fluid NVT benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "total number of simulation steps");
     app.add_option("-L,--length", config.Lx, "simulation box diameter");
-    app.add_option("-e,--numeq", config.nstepsEq, "number of equilibration steps");
     app.add_option(
         "-T,--temperature",
         config.temperature,
@@ -303,8 +265,8 @@ int main(int argc, char* argv[])  // NOLINT
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;
 
-    // set up run simulation
-    runLennardJones_idealGas_localCap(config);
+    // run simulation in NVT
+    runLennardJonesNVT(config);
 
     return EXIT_SUCCESS;
 }

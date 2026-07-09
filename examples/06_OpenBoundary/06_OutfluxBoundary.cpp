@@ -24,11 +24,10 @@
 #include <iostream>
 
 #include "Cabana_NeighborList.hpp"
-#include "action/LangevinThermostat.hpp"
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -147,7 +146,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
 
     // set up thermostat for temperature control during equilibration
-    action::LangevinThermostat langevinThermostat(config.gamma, config.temperature, config.dt);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -163,7 +162,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
 
         // remove atoms that left the domain through the open boundary
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
@@ -241,11 +240,8 @@ void runLennardJones_idealGas_localCap(Config& config)
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
 
-        // apply Langevin thermostat for temperature control
-        langevinThermostat.apply(atoms);
-
         // integrate equations of motion after force calculation
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))
