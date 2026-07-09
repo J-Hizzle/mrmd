@@ -154,10 +154,10 @@ public:
                                       const real_t reservoirMass,
                                       const real_t dt);
 
-    OpenBoundaryLayer(idx_t seed) : RNG(seed) {};
+    OpenBoundaryLayer(idx_t seed) : randPool_(seed) {};
 
 private:
-    Kokkos::Random_XorShift1024_Pool<> RNG{1234};
+    Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
 };
 
 void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
@@ -198,6 +198,7 @@ data::Atoms OpenBoundaryLayer::createBoundaryAtoms(const data::Subdomain& subdom
 {
     data::Atoms boundaryAtoms(numAtoms);
 
+    auto RNG = randPool_;
     auto pos = boundaryAtoms.getPos();
     auto vel = boundaryAtoms.getVel();
     auto force = boundaryAtoms.getForce();
@@ -260,6 +261,7 @@ idx_t OpenBoundaryLayer::sampleHalfNumberOfAtomsToInsert(const data::Subdomain& 
                                                      const real_t reservoirMass,
                                                      const real_t dt)
 {
+    auto RNG = randPool_;
     real_t fractionalNumberOfAtomsToInsert = 0_r;
     auto randGen = RNG.get_state();
     fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
