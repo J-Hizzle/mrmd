@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,30 +24,33 @@ namespace mrmd
 {
 namespace util
 {
-template <typename HEAD>
+template <int PRECISION = 2, typename HEAD>
 void printTable(HEAD head)
 {
-    std::cout << " │ " << std::setw(10) << std::setprecision(2) << std::fixed << head << " │ "
+    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed << head << " │ "
               << std::endl;
 }
-template <typename HEAD, typename... TAIL>
+template <int PRECISION = 2, typename HEAD, typename... TAIL>
 void printTable(HEAD head, TAIL... tail)
 {
-    std::cout << " │ " << std::setw(10) << std::setprecision(2) << std::fixed << head;
-    printTable(tail...);
+    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed << head;
+    printTable<PRECISION>(tail...);
 }
 
-template <typename HEAD>
+template <int PRECISION = 2, typename HEAD>
 void printTableSep(HEAD /*head*/)
 {
-    std::cout << "─┼─" << std::setw(10) << std::setprecision(2) << std::fixed << "──────────"
-              << "─┼─" << std::endl;
+    std::string sep;
+    for (int i = 0; i < 8 + PRECISION; ++i) sep += "─";
+    std::cout << "─┼─" << sep << "─┼─" << std::endl;
 }
-template <typename HEAD, typename... TAIL>
+template <int PRECISION = 2, typename HEAD, typename... TAIL>
 void printTableSep(HEAD /*head*/, TAIL... tail)
 {
-    std::cout << "─┼─" << std::setw(10) << std::setprecision(2) << std::fixed << "──────────";
-    printTableSep(tail...);
+    std::string sep;
+    for (int i = 0; i < 8 + PRECISION; ++i) sep += "─";
+    std::cout << "─┼─" << sep;
+    printTableSep<PRECISION>(tail...);
 }
 
 }  // namespace util
