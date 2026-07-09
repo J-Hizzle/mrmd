@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <random>
+
 #include "PositiveNegativeCounter.hpp"
 #include "communication/GhostLayer.hpp"
 #include "constants.hpp"
@@ -154,10 +156,11 @@ public:
                                       const real_t reservoirMass,
                                       const real_t dt);
 
-    OpenBoundaryLayer(idx_t seed) : randPool_(seed) {};
+    OpenBoundaryLayer(idx_t seed) : randPool_(seed), hostRng_(static_cast<std::mt19937_64::result_type>(seed)) {};
 
 private:
     Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
+    std::mt19937_64 hostRng_{1234};
 };
 
 void OpenBoundaryLayer::insertBoundaryAtoms(data::Atoms& atoms,
@@ -263,16 +266,15 @@ idx_t OpenBoundaryLayer::sampleHalfNumberOfAtomsToInsert(const data::Subdomain& 
 {
     auto RNG = randPool_;
     real_t fractionalNumberOfAtomsToInsert = 0_r;
-    auto randGen = RNG.get_state();
     fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
          std::sqrt(reservoirTemperature / (2 * pi * reservoirMass));
     idx_t integerNumberOfAtomsToInsert = std::floor(fractionalNumberOfAtomsToInsert);
-    auto randnum = randGen.drand();
+    std::uniform_real_distribution<real_t> dist(0_r, 1_r);
+    auto randnum = dist(hostRng_);
     if (randnum < fractionalNumberOfAtomsToInsert - integerNumberOfAtomsToInsert)
     {
         ++integerNumberOfAtomsToInsert;
     }
-    RNG.free_state(randGen);
     return integerNumberOfAtomsToInsert;
 }
 }  // namespace communication
