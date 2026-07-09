@@ -264,7 +264,6 @@ idx_t OpenBoundaryLayer::sampleHalfNumberOfAtomsToInsert(const data::Subdomain& 
                                                      const real_t reservoirMass,
                                                      const real_t dt)
 {
-    auto RNG = randPool_;
     real_t fractionalNumberOfAtomsToInsert = 0_r;
     fractionalNumberOfAtomsToInsert = reservoirDensity * subdomain.getAreaNormalToAxis(axis) * dt *
          std::sqrt(reservoirTemperature / (2 * pi * reservoirMass));
