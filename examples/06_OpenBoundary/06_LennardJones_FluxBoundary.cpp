@@ -27,6 +27,7 @@
 #include "action/LennardJones.hpp"
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
+#include "action/ThermodynamicForce.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
@@ -39,6 +40,7 @@
 #include "datatypes.hpp"
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
+#include "io/DumpProfile.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -63,7 +65,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    static constexpr real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
+    real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -74,11 +76,8 @@ struct Config
         60;  ///< estimated maximum number of neighbors per atom
 
     // system parameters
-    static constexpr idx_t numAtoms = 16 * 16 * 16;  ///< number of atoms in the simulation
+    static constexpr idx_t numAtoms = 9990;  ///< number of atoms in the simulation
     real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
-    // equilibration parameters
-    idx_t nstepsEq = 100000;  ///< number of equilibration steps
 
     // thermostat parameters
     real_t temperature =
@@ -89,6 +88,17 @@ struct Config
     real_t reservoirDensityFeedback =
         0.002_r;  ///< feedback gain for reservoir density control (0 disables control)
 
+    // thermodynamic force parameters
+    idx_t densitySamplingInterval = 200;
+    idx_t densityUpdateInterval = 10000;
+    real_t densityBinWidth = 0.2_r * sigma;
+    real_t smoothingDamping = 1_r;
+    real_t smoothingInverseDamping = 1_r / smoothingDamping;
+    idx_t smoothingNeighbors = 0;
+    real_t smoothingRange = real_c(smoothingNeighbors) * densityBinWidth * smoothingDamping;
+    real_t thermodynamicForceModulation = 1_r;
+    const bool enforceSymmetry = true;
+
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
@@ -97,6 +107,7 @@ struct Config
 
     std::string fileOut = "openBoundary";  ///< base name for output files
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
+    std::string fileOutDens = format("{0}_dens.txt", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -139,7 +150,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 
     // initialize atoms randomly in the domain
     auto atoms =
-        util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
+        util::fillDomainWithThermalizedAtoms(subdomain, config.numAtoms, config.mass, config.temperature);
 
     // calculate and print initial density
     auto rhoTarget = real_c(atoms.numLocalAtoms) / volume;
@@ -168,14 +179,16 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "y center: " << boxCenter[1] << std::endl;
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
-    // set up different interaction regions for capped and bare LJ potential
-    util::IsInSymmetricSlab isInNoCapRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
-    util::IsInSymmetricSlab isInCappingRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
-
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
+
+    // set up thermodynamic force for density control
+    action::ThermodynamicForce thermodynamicForce({rhoTarget},
+                                                  subdomain,
+                                                  config.densityBinWidth,
+                                                  {config.thermodynamicForceModulation},
+                                                  config.enforceSymmetry,
+                                                  false);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -186,6 +199,13 @@ void runLennardJones_idealGas_localCap(Config& config)
 
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
+
+    real_t densityBinVolume =
+        subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
+    io::DumpProfile dumpDens;
+    dumpDens.open(config.fileOutDens);
+    dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+        Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
 
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
@@ -223,6 +243,32 @@ void runLennardJones_idealGas_localCap(Config& config)
                             subdomain.maxGhostCorner.data(),
                             config.estimatedMaxNeighbors);
         ++rebuildCounter;
+
+        if (step % config.densitySamplingInterval == 0)
+        {
+            thermodynamicForce.sample(atoms);
+        }
+
+        if (step % config.densityUpdateInterval == 0 && step > 0)
+        {
+            // density profile output
+            auto numberOfDensityProfileSamples =
+                thermodynamicForce.getNumberOfDensityProfileSamples();
+
+            real_t normalizationFactor = 1_r / densityBinVolume;
+            if (numberOfDensityProfileSamples > 0)
+            {
+                normalizationFactor =
+                    1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
+            }
+            auto densityProfile = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
+            dumpDens.dumpScalarView(densityProfile, normalizationFactor);
+
+            thermodynamicForce.update(
+                config.smoothingInverseDamping, config.smoothingRange);
+        }
+
 
         // reset forces to zero
         auto force = atoms.getForce();
@@ -282,6 +328,8 @@ void runLennardJones_idealGas_localCap(Config& config)
                     true);
     }
 
+    dumpDens.close();
+
     // write performance data to file
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
     std::ofstream fout("ecab.perf", std::ofstream::app);
@@ -311,10 +359,28 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--density-feedback",
                    config.reservoirDensityFeedback,
                    "feedback gain for reservoir density control (0 disables)");
+
+    app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
+    app.add_option("--update", config.densityUpdateInterval, "density update interval");
+    app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
+    app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
+    app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
+    app.add_option(
+        "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
+    app.add_option(
+        "--rcap", config.r_cap, "capping radius for inner Lennard-Jones potential");
+
     CLI11_PARSE(app, argc, argv);
+
+    config.fileOutFinalGro = format("{0}_final.gro", config.fileOut);
+    config.fileOutDens = format("{0}_dens.txt", config.fileOut);
+
+    config.smoothingRange =
+        real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
 
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;
+
 
     // set up run simulation
     runLennardJones_idealGas_localCap(config);
