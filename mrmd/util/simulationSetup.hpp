@@ -29,8 +29,8 @@ data::Atoms fillDomainWithAtoms(const data::Subdomain& subdomain,
                                 const real_t& inputMass);
 
 data::Atoms fillDomainWithThermalizedAtoms(const data::Subdomain& subdomain,
-                                const idx_t numAtoms,
-                                const real_t inputMass,
-                                const real_t temperature);
+                                           const idx_t numAtoms,
+                                           const real_t inputMass,
+                                           const real_t temperature);
 }  // namespace util
 }  // namespace mrmd

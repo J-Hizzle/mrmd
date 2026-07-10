@@ -27,13 +27,14 @@ namespace util
 template <int PRECISION = 2, typename HEAD>
 void printTable(HEAD head)
 {
-    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed << head << " │ "
-              << std::endl;
+    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed
+              << head << " │ " << std::endl;
 }
 template <int PRECISION = 2, typename HEAD, typename... TAIL>
 void printTable(HEAD head, TAIL... tail)
 {
-    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed << head;
+    std::cout << " │ " << std::setw(8 + PRECISION) << std::setprecision(PRECISION) << std::fixed
+              << head;
     printTable<PRECISION>(tail...);
 }
 
