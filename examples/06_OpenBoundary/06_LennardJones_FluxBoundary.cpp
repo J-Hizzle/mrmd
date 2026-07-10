@@ -41,6 +41,7 @@
 #include "initialization.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpProfile.hpp"
+#include "io/DumpThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -84,8 +85,6 @@ struct Config
     real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
     real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
-    real_t thermostatRegionMin = 13.5_r * sigma;
-    real_t thermostatRegionMax = 15_r * sigma;
 
     // chemostat parameters
     real_t reservoirDensityFeedback =
@@ -102,6 +101,12 @@ struct Config
     real_t thermodynamicForceModulation = 1_r;
     const bool enforceSymmetry = true;
 
+    // application regions
+    real_t thermostatRegionMin = 13.5_r * sigma;
+    real_t thermostatRegionMax = 15_r * sigma;
+    real_t thermoForceRegionMin = 12.5_r * sigma;
+    real_t thermoForceRegionMax = 14.5_r * sigma;
+
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
@@ -110,7 +115,9 @@ struct Config
 
     std::string fileOut = "openBoundary";  ///< base name for output files
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
+    std::string fileOutTF = format("{0}_tf.txt", fileOut);
     std::string fileOutDens = format("{0}_dens.txt", fileOut);
+    std::string fileOutFinalTF = format("{0}_final_tf.txt", fileOut);
 };
 
 void runLennardJones_idealGas_localCap(Config& config)
@@ -188,6 +195,9 @@ void runLennardJones_idealGas_localCap(Config& config)
     util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                  config.thermostatRegionMin,
                                                  config.thermostatRegionMax);
+    util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                  config.thermoForceRegionMin,
+                                                  config.thermoForceRegionMax);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rhoTarget},
@@ -210,9 +220,13 @@ void runLennardJones_idealGas_localCap(Config& config)
     real_t densityBinVolume =
         subdomain.diameter[1] * subdomain.diameter[2] * config.densityBinWidth;
     io::DumpProfile dumpDens;
+    io::DumpProfile dumpThermoForce;
     dumpDens.open(config.fileOutDens);
     dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
         Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
+        dumpThermoForce.open(config.fileOutTF);
+        dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getForce())));
 
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
@@ -272,13 +286,15 @@ void runLennardJones_idealGas_localCap(Config& config)
                 Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
             dumpDens.dumpScalarView(densityProfile, normalizationFactor);
 
-            thermodynamicForce.update(
-                config.smoothingInverseDamping, config.smoothingRange);
+            thermodynamicForce.update_if(
+                config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
         }
 
         // reset forces to zero
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
+
+        thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
         // calculate and apply forces
         lennardJones.apply(atoms, verletList);
@@ -317,6 +333,17 @@ void runLennardJones_idealGas_localCap(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
                   << " " << rhoInstant << " " << rhoReservoir << std::endl;
+        
+            // thermodynamic force output
+            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                                   thermodynamicForce.getForce(0));
+            dumpThermoForce.dumpScalarView(thermoForce);
+
+            io::dumpThermoForce(format("{0}_i{1:02}_tf.txt",
+                                       config.fileOut,
+                                       idx_c(std::floor(step / config.densityUpdateInterval))),
+                                thermodynamicForce,
+                                0);
         }
     }
     if (config.bOutput)
@@ -338,6 +365,10 @@ void runLennardJones_idealGas_localCap(Config& config)
     }
 
     dumpDens.close();
+    dumpThermoForce.close();
+
+    // final thermodynamic force output
+    io::dumpThermoForce(config.fileOutFinalTF, thermodynamicForce, 0);
 
     // write performance data to file
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
@@ -368,10 +399,6 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--density-feedback",
                    config.reservoirDensityFeedback,
                    "feedback gain for reservoir density control (0 disables)");
-    app.add_option(
-        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
-    app.add_option(
-        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
@@ -382,6 +409,17 @@ int main(int argc, char* argv[])  // NOLINT
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option(
         "--rcap", config.r_cap, "capping radius for inner Lennard-Jones potential");
+
+    app.add_option(
+        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
+    app.add_option(
+        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
+    app.add_option("--thermoforcemin",
+                   config.thermoForceRegionMin,
+                   "thermodynamic force region minimum coordinate");
+    app.add_option("--thermoforcemax",
+                   config.thermoForceRegionMax,
+                   "thermodynamic force region maximum coordinate");
 
     CLI11_PARSE(app, argc, argv);
 
