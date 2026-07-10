@@ -105,7 +105,7 @@ struct Config
     real_t thermostatRegionMin = 13.5_r * sigma;
     real_t thermostatRegionMax = 15_r * sigma;
     real_t thermoForceRegionMin = 12.5_r * sigma;
-    real_t thermoForceRegionMax = 14.5_r * sigma;
+    real_t thermoForceRegionMax = 15.0_r * sigma;
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -191,14 +191,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
 
-    // set up application regions
-    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                                 config.thermostatRegionMin,
-                                                 config.thermostatRegionMax);
-    util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                                  config.thermoForceRegionMin,
-                                                  config.thermoForceRegionMax);
-
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rhoTarget},
                                                   subdomain,
@@ -206,6 +198,16 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                   {config.thermodynamicForceModulation},
                                                   config.enforceSymmetry,
                                                   false);
+
+    // set up application regions
+    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                 config.thermostatRegionMin,
+                                                 config.thermostatRegionMax);
+    util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                  config.thermoForceRegionMin,
+                                                  config.thermoForceRegionMax,
+                                                  AXIS::X,
+                                                  std::numeric_limits<real_t>::epsilon());
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
