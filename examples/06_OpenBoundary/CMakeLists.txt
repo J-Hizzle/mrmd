@@ -21,6 +21,13 @@ target_link_libraries(06_LennardJones_FluxBoundary
         )
 add_test(NAME Example.06_LennardJones_FluxBoundary COMMAND ./06_LennardJones_FluxBoundary --nsteps 10)
 
+add_executable(06_LennardJones_FluxBoundary_NonEquilibrium
+        06_LennardJones_FluxBoundary_NonEquilibrium.cpp
+        )
+target_link_libraries(06_LennardJones_FluxBoundary_NonEquilibrium
+        PRIVATE mrmd CLI11::CLI11
+        )
+
 add_executable(06_OutfluxBoundary
         06_OutfluxBoundary.cpp
         )

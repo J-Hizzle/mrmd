@@ -58,6 +58,14 @@ public:
 
     template <OnePositionPredicate Pred>
     real_t preForceIntegrate_apply_if(data::Atoms& atoms, const real_t dt, const Pred& pred);
+
+    template <OnePositionPredicate PredLeft, OnePositionPredicate PredRight>
+    real_t preForceIntegrate_applyAsymmetric_if(data::Atoms& atoms,
+                                                const real_t dt,
+                                                const PredLeft& predLeft,
+                                                const PredRight& predRight,
+                                                const real_t temperatureLeft,
+                                                const real_t temperatureRight);
 };
 
 template <OnePositionPredicate Pred>
@@ -108,6 +116,103 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
                                             mass(idx),
                                             zeta,
                                             temperature,
+                                            randGen.normal(),
+                                            randGen.normal(),
+                                            randGen.normal());
+
+            // Give the state back, which will allow another thread to acquire it
+            RNG.free_state(randGen);
+        }
+
+        action::updateDrift(
+            pos(idx, 0), pos(idx, 1), pos(idx, 2), vel(idx, 0), vel(idx, 1), vel(idx, 2), dtHalf);
+
+        dx[0] -= pos(idx, 0);
+        dx[1] -= pos(idx, 1);
+        dx[2] -= pos(idx, 2);
+
+        auto distSqr = util::dot3(dx, dx);
+        maxDistSqr = Kokkos::max(distSqr, maxDistSqr);
+    };
+    real_t maxDistSqr = 0_r;
+    Kokkos::parallel_reduce("VelocityVerletLangevinThermostat::preForceIntegrate",
+                            policy,
+                            kernel,
+                            Kokkos::Max<real_t>(maxDistSqr));
+    Kokkos::fence();
+    return std::sqrt(maxDistSqr);
+}
+
+template <OnePositionPredicate PredLeft, OnePositionPredicate PredRight>
+real_t VelocityVerletLangevinThermostat::preForceIntegrate_applyAsymmetric_if(data::Atoms& atoms,
+                                                                    const real_t dt,
+                                                                    const PredLeft& predLeft,
+                                                                    const PredRight& predRight,
+                                                                    const real_t temperatureLeft,
+                                                                    const real_t temperatureRight)
+{
+    auto RNG = randPool_;
+    auto dtHalf(0.5_r * dt);
+    auto dtFull(dt);
+    auto pos = atoms.getPos();
+    auto vel = atoms.getVel();
+    auto force = atoms.getForce();
+    auto mass = atoms.getMass();
+    auto zeta = zeta_;
+
+    auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t& idx, real_t& maxDistSqr)
+    {
+        real_t dx[3];
+        dx[0] = pos(idx, 0);
+        dx[1] = pos(idx, 1);
+        dx[2] = pos(idx, 2);
+
+        action::updateKick(vel(idx, 0),
+                           vel(idx, 1),
+                           vel(idx, 2),
+                           force(idx, 0),
+                           force(idx, 1),
+                           force(idx, 2),
+                           dtHalf,
+                           mass(idx));
+
+        action::updateDrift(
+            pos(idx, 0), pos(idx, 1), pos(idx, 2), vel(idx, 0), vel(idx, 1), vel(idx, 2), dtHalf);
+
+        if (predLeft(pos(idx, 0), pos(idx, 1), pos(idx, 2)))
+        {
+            // Get a random number state from the pool for the active thread
+            auto randGen = RNG.get_state();
+
+            // Apply the Ornstein-Uhlenbeck process to the velocity
+            action::updateOrnsteinUhlenbeck(vel(idx, 0),
+                                            vel(idx, 1),
+                                            vel(idx, 2),
+                                            dtFull,
+                                            mass(idx),
+                                            zeta,
+                                            temperatureLeft,
+                                            randGen.normal(),
+                                            randGen.normal(),
+                                            randGen.normal());
+
+            // Give the state back, which will allow another thread to acquire it
+            RNG.free_state(randGen);
+        }
+        else if (predRight(pos(idx, 0), pos(idx, 1), pos(idx, 2)))
+        {
+            // Get a random number state from the pool for the active thread
+            auto randGen = RNG.get_state();
+
+            // Apply the Ornstein-Uhlenbeck process to the velocity
+            action::updateOrnsteinUhlenbeck(vel(idx, 0),
+                                            vel(idx, 1),
+                                            vel(idx, 2),
+                                            dtFull,
+                                            mass(idx),
+                                            zeta,
+                                            temperatureRight,
                                             randGen.normal(),
                                             randGen.normal(),
                                             randGen.normal());
