@@ -224,8 +224,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     dumpDens.open(config.fileOutDens);
     dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
         Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
-        dumpThermoForce.open(config.fileOutTF);
-        dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+    dumpThermoForce.open(config.fileOutTF);
+    dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getForce())));
 
     // main simulation loop
@@ -288,6 +288,17 @@ void runLennardJones_idealGas_localCap(Config& config)
 
             thermodynamicForce.update_if(
                 config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+            
+            // thermodynamic force output
+            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                                   thermodynamicForce.getForce(0));
+            dumpThermoForce.dumpScalarView(thermoForce);
+
+            io::dumpThermoForce(format("{0}_i{1:02}_tf.txt",
+                                       config.fileOut,
+                                       idx_c(std::floor(step / config.densityUpdateInterval))),
+                                thermodynamicForce,
+                                0);        
         }
 
         // reset forces to zero
@@ -333,17 +344,6 @@ void runLennardJones_idealGas_localCap(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
                   << " " << rhoInstant << " " << rhoReservoir << std::endl;
-        
-            // thermodynamic force output
-            auto thermoForce = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
-                                                                   thermodynamicForce.getForce(0));
-            dumpThermoForce.dumpScalarView(thermoForce);
-
-            io::dumpThermoForce(format("{0}_i{1:02}_tf.txt",
-                                       config.fileOut,
-                                       idx_c(std::floor(step / config.densityUpdateInterval))),
-                                thermodynamicForce,
-                                0);
         }
     }
     if (config.bOutput)
@@ -423,8 +423,10 @@ int main(int argc, char* argv[])  // NOLINT
 
     CLI11_PARSE(app, argc, argv);
 
-    config.fileOutFinalGro = format("{0}_final.gro", config.fileOut);
+    config.fileOutTF = format("{0}_tf.txt", config.fileOut);
     config.fileOutDens = format("{0}_dens.txt", config.fileOut);
+    config.fileOutFinalGro = format("{0}_final.gro", config.fileOut);
+    config.fileOutFinalTF = format("{0}_final_tf.txt", config.fileOut);
 
     config.smoothingRange =
         real_c(config.smoothingNeighbors) * config.densityBinWidth * config.smoothingDamping;
