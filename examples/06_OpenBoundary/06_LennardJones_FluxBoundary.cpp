@@ -105,7 +105,7 @@ struct Config
     real_t thermostatRegionMin = 13.5_r * sigma;
     real_t thermostatRegionMax = 15_r * sigma;
     real_t thermoForceRegionMin = 12.5_r * sigma;
-    real_t thermoForceRegionMax = 15.0_r * sigma;
+    real_t thermoForceRegionMax = 15_r * sigma;
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
