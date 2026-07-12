@@ -42,6 +42,7 @@
 #include "io/DumpGRO.hpp"
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
+#include "io/RestoreGRO.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -56,6 +57,9 @@ using namespace mrmd;
  */
 struct Config
 {
+    // input file parameters
+    std::string fileRestoreGRO = "equilibrateLangevin_rho370_T15_x30_yz30_2026_07_12.gro";
+
     // simulation time parameters
     idx_t nsteps = 400001;               ///< number of steps to simulate
     real_t dt = 0.002_r;  ///< time step size in reduced units
@@ -78,10 +82,6 @@ struct Config
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
 
-    // system parameters
-    static constexpr idx_t numAtoms = 9990;  ///< number of atoms in the simulation
-    real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
     // thermostat parameters
     real_t temperatureLeft =
         1.5_r;  ///< target temperature for left reservoir
@@ -90,8 +90,9 @@ struct Config
     real_t gamma = 100_r;  ///< friction coefficient for Langevin thermostat
 
     // chemostat parameters
-    real_t reservoirDensityLeft = 0.296_r;  ///< target density for left reservoir
-    real_t reservoirDensityRight = 0.37_r;  ///< target density for right reservoir
+    //real_t reservoirDensityLeft = 0.37_r;  ///< target density for left reservoir
+    //real_t reservoirDensityRight = 0.37_r;  ///< target density for right reservoir
+    real_t reservoirDensity = 0.37_r;  ///< target density for the reservoir
     real_t reservoirDensityFeedback =
         10_r * dt;  ///< feedback gain for reservoir density control (0 disables control)
 
@@ -106,10 +107,10 @@ struct Config
     real_t thermodynamicForceModulation = 1_r;
 
     // application regions
-    real_t thermostatRegionMinLeft = -15_r * sigma;
-    real_t thermostatRegionMaxLeft = -13.5_r * sigma;
-    real_t thermostatRegionMinRight = 13.5_r * sigma;
-    real_t thermostatRegionMaxRight = 15_r * sigma;
+    real_t thermostatRegionMinLeft = 0_r * sigma;
+    real_t thermostatRegionMaxLeft = 1.5_r * sigma;
+    real_t thermostatRegionMinRight = 28.5_r * sigma;
+    real_t thermostatRegionMaxRight = 30_r * sigma;
     real_t thermoForceRegionMin = 12.5_r * sigma;
     real_t thermoForceRegionMax = 15_r * sigma;
 
@@ -129,13 +130,24 @@ struct Config
 void runLennardJones_idealGas_localCap(Config& config)
 {
     // initialize simulation domain
-    data::Subdomain subdomain({0_r, 0_r, 0_r},
-                              {config.Lx, config.Lx, config.Lx},
+    auto subdomainTmp = data::Subdomain({0_r, 0_r, 0_r}, {0_r, 0_r, 0_r}, config.neighborCutoff);
+
+    // initialize atoms randomly in the domain
+    auto atoms = data::Atoms(0);
+
+    // restore initial phase point from file
+    io::restoreGRO(config.fileRestoreGRO, subdomainTmp, atoms);
+
+    data::Subdomain subdomain(subdomainTmp.minCorner,
+                              subdomainTmp.maxCorner,
                               Kokkos::Array<data::Subdomain::BoundaryCondition, 3>{
                                   data::Subdomain::BoundaryCondition::OPEN,
                                   data::Subdomain::BoundaryCondition::PERIODIC,
                                   data::Subdomain::BoundaryCondition::PERIODIC},
-                              config.r_cut);
+                              config.neighborCutoff);
+
+    // calculate volume of the simulation domain
+    const auto volume = subdomain.getVolume();
 
     std::cout
         << "boundaryCondition x: "
@@ -161,18 +173,12 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "ghostLayerThickness y: " << subdomain.ghostLayerThickness[1] << std::endl;
     std::cout << "ghostLayerThickness z: " << subdomain.ghostLayerThickness[2] << std::endl;
 
-    // calculate volume of the simulation domain
-    const auto volume = subdomain.getVolume();
-
-    // initialize atoms randomly in the domain
-    auto atoms =
-        util::fillDomainWithThermalizedAtoms(subdomain, config.numAtoms, config.mass, (config.temperatureLeft + config.temperatureRight) / 2_r);
-
     // calculate and print initial density
     auto rhoInit = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho initial: " << rhoInit << std::endl;
-    auto rhoReservoirLeft = config.reservoirDensityLeft;
-    auto rhoReservoirRight = config.reservoirDensityRight;
+    //auto rhoReservoirLeft = config.reservoirDensityLeft;
+    //auto rhoReservoirRight = config.reservoirDensityRight;
+    auto rhoReservoir = config.reservoirDensity;
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -196,10 +202,10 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, 0_r);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, 1.5_r);
 
     // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({(config.reservoirDensityLeft + config.reservoirDensityRight)/2_r},
+    action::ThermodynamicForce thermodynamicForce({config.reservoirDensity},
                                                   subdomain,
                                                   config.densityBinWidth,
                                                   {config.thermodynamicForceModulation},
@@ -211,7 +217,6 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                  config.thermostatRegionMaxLeft);
     util::IsInSlab isInThermostatRegionRight(config.thermostatRegionMinRight,
                                                  config.thermostatRegionMaxRight);
-
     util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                   config.thermoForceRegionMin,
                                                   config.thermoForceRegionMax,
@@ -251,15 +256,15 @@ void runLennardJones_idealGas_localCap(Config& config)
         // calculate instantaneous densities
         //const auto rhoInstantLeft = util::calcDensity_if(atoms, isInThermostatRegionLeft, volume);
         //const auto rhoInstantRight = util::calcDensity_if(atoms, isInThermostatRegionRight, volume);
-        const auto rhoInstantRight = atoms.numLocalAtoms / volume;
-        rhoReservoirLeft += config.reservoirDensityFeedback * (config.reservoirDensityRight - rhoInstantRight);
-        rhoReservoirLeft = std::max(0_r, rhoReservoirLeft);
+        const auto rhoInstant = atoms.numLocalAtoms / volume;
+        rhoReservoir += config.reservoirDensityFeedback * (config.reservoirDensity - rhoInstant);
+        rhoReservoir = std::max(0_r, rhoReservoir);
         //rhoReservoirRight += config.reservoirDensityFeedback * (config.reservoirDensityRight - rhoInstantRight);
         //rhoReservoirRight = std::max(0_r, rhoReservoirRight);
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperatureLeft, rhoReservoirLeft, config.mass, config.dt);
+            atoms, subdomain, (config.temperatureLeft + config.temperatureRight)/2_r, rhoReservoir, config.mass, config.dt);
 
         // reset displacement
         maxAtomDisplacement = 0_r;
@@ -353,13 +358,13 @@ void runLennardJones_idealGas_localCap(Config& config)
                              p,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms,
-                             rhoInstantRight,
-                             rhoReservoirLeft);
+                             rhoInstant,
+                             rhoReservoir);
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
-                  << " " << rhoInstantRight << " " << rhoReservoirLeft << std::endl;
+                  << " " << rhoInstant << " " << rhoReservoir << std::endl;
         }
     }
     if (config.bOutput)

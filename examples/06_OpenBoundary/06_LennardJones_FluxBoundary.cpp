@@ -83,8 +83,8 @@ struct Config
 
     // thermostat parameters
     real_t temperature =
-        1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+        1.5_r;  ///< target temperature in reduced units
+    real_t gamma = 100_r;  ///< friction coefficient for Langevin thermostat
 
     // chemostat parameters
     real_t reservoirDensityFeedback =
