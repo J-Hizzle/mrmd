@@ -85,7 +85,7 @@ struct Config
 
     // thermostat parameters
     communication::OpenBoundaryLayer::BoundaryValues reservoirTemperature{{
-        {{1.5_r, 2.0_r}},
+        {{1.5_r, 1.6_r}},
         {{-1_r, -1_r}},
         {{-1_r, -1_r}}
     }};
@@ -93,7 +93,7 @@ struct Config
 
     // chemostat parameters
     communication::OpenBoundaryLayer::BoundaryValues reservoirDensity{{
-        {{0.296_r, 0.370_r}}, // x: left, right
+        {{0.370_r, 0.360_r}}, // x: left, right
         {{-1_r,   -1_r   }},  // y
         {{-1_r,   -1_r   }}   // z
     }};
@@ -229,8 +229,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     Kokkos::Timer timer;
 
     // print table header for simulation statistics
-    util::printTable<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
-    util::printTableSep<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
+    util::printTable<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstant", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
+    util::printTableSep<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstant", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
 
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
@@ -362,6 +362,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                              p,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms,
+                             rhoInstant,
                              rhoInstantLeft,
                              rhoInstantRight,
                              rhoReservoir[0][0],
@@ -370,7 +371,7 @@ void runLennardJones_idealGas_localCap(Config& config)
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
-                  << " " << rhoReservoir[0][0] << " " << rhoReservoir[0][1] << std::endl;
+                  << " " << rhoInstant << " " << rhoInstantLeft << " " << rhoInstantRight << " " << rhoReservoir[0][0] << " " << rhoReservoir[0][1] << std::endl;
         }
     }
     if (config.bOutput)
