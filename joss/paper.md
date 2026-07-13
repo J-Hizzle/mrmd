@@ -1,5 +1,5 @@
 ---
-title: 'Gala: A Python package for galactic dynamics'
+title: 'MRMD: A C++ package for Multi-Resolution Molecular Dynamics'
 tags:
   - Python
   - astronomy
