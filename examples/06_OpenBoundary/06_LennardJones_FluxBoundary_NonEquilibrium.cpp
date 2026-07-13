@@ -33,6 +33,7 @@
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
 #include "analysis/SystemMomentum.hpp"
+#include "analysis/Density.hpp"
 #include "communication/GhostLayer.hpp"
 #include "communication/OpenBoundaryLayer.hpp"
 #include "data/Atoms.hpp"
@@ -72,7 +73,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
+    real_t r_cap = 0.82417464_r * sigma;  ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -83,16 +84,19 @@ struct Config
         60;  ///< estimated maximum number of neighbors per atom
 
     // thermostat parameters
-    real_t temperatureLeft =
-        1.5_r;  ///< target temperature for left reservoir
-    real_t temperatureRight =
-        2.0_r;  ///< target temperature for right reservoir
+    communication::OpenBoundaryLayer::BoundaryValues reservoirTemperature{{
+        {{1.5_r, 2.0_r}},
+        {{-1_r, -1_r}},
+        {{-1_r, -1_r}}
+    }};
     real_t gamma = 100_r;  ///< friction coefficient for Langevin thermostat
 
     // chemostat parameters
-    //real_t reservoirDensityLeft = 0.37_r;  ///< target density for left reservoir
-    //real_t reservoirDensityRight = 0.37_r;  ///< target density for right reservoir
-    real_t reservoirDensity = 0.37_r;  ///< target density for the reservoir
+    communication::OpenBoundaryLayer::BoundaryValues reservoirDensity{{
+        {{0.296_r, 0.370_r}}, // x: left, right
+        {{-1_r,   -1_r   }},  // y
+        {{-1_r,   -1_r   }}   // z
+    }};
     real_t reservoirDensityFeedback =
         10_r * dt;  ///< feedback gain for reservoir density control (0 disables control)
 
@@ -176,9 +180,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     // calculate and print initial density
     auto rhoInit = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho initial: " << rhoInit << std::endl;
-    //auto rhoReservoirLeft = config.reservoirDensityLeft;
-    //auto rhoReservoirRight = config.reservoirDensityRight;
-    auto rhoReservoir = config.reservoirDensity;
+    communication::OpenBoundaryLayer::BoundaryValues rhoReservoir = config.reservoirDensity;
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -205,7 +207,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, 1.5_r);
 
     // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({config.reservoirDensity},
+    action::ThermodynamicForce thermodynamicForce({1_r},
                                                   subdomain,
                                                   config.densityBinWidth,
                                                   {config.thermodynamicForceModulation},
@@ -227,8 +229,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     Kokkos::Timer timer;
 
     // print table header for simulation statistics
-    util::printTable<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rho res");
-    util::printTableSep<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rho", "rho res");
+    util::printTable<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
+    util::printTableSep<4>("step", "time", "T", "Ek", "E0", "E", "p", "Nlocal", "Nghost", "rhoInstLeft", "rhoInstRight", "rhoResLeft", "rhoResRight");
 
     // open statistics file for writing simulation statistics
     std::ofstream fStat("statistics.txt");
@@ -248,23 +250,24 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_applyAsymmetric_if(atoms, config.dt, isInThermostatRegionLeft, isInThermostatRegionRight, config.temperatureLeft, config.temperatureRight);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_applyAsymmetric_if(atoms, config.dt, isInThermostatRegionLeft, isInThermostatRegionRight, config.reservoirTemperature[0][0], config.reservoirTemperature[0][1]);
 
         // remove atoms that left the domain through the open boundary
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
 
         // calculate instantaneous densities
-        //const auto rhoInstantLeft = util::calcDensity_if(atoms, isInThermostatRegionLeft, volume);
-        //const auto rhoInstantRight = util::calcDensity_if(atoms, isInThermostatRegionRight, volume);
-        const auto rhoInstant = atoms.numLocalAtoms / volume;
-        rhoReservoir += config.reservoirDensityFeedback * (config.reservoirDensity - rhoInstant);
-        rhoReservoir = std::max(0_r, rhoReservoir);
-        //rhoReservoirRight += config.reservoirDensityFeedback * (config.reservoirDensityRight - rhoInstantRight);
-        //rhoReservoirRight = std::max(0_r, rhoReservoirRight);
+        const auto rhoInstantLeft = analysis::getDensity_if(atoms, subdomain, isInThermostatRegionLeft);
+        const auto rhoInstantRight = analysis::getDensity_if(atoms, subdomain, isInThermostatRegionRight);
+
+        rhoReservoir[0][0] += config.reservoirDensityFeedback * (config.reservoirDensity[0][0] - rhoInstantLeft);
+        rhoReservoir[0][0] = std::max(0_r, rhoReservoir[0][0]);
+
+        rhoReservoir[0][1] += config.reservoirDensityFeedback * (config.reservoirDensity[0][1] - rhoInstantRight);
+        rhoReservoir[0][1] = std::max(0_r, rhoReservoir[0][1]);
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, (config.temperatureLeft + config.temperatureRight)/2_r, rhoReservoir, config.mass, config.dt);
+            atoms, subdomain, config.reservoirTemperature, rhoReservoir, config.mass, config.dt);
 
         // reset displacement
         maxAtomDisplacement = 0_r;
@@ -347,6 +350,7 @@ void runLennardJones_idealGas_localCap(Config& config)
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
             auto p = analysis::getPressure(atoms, subdomain);
+            auto rhoInstant = analysis::getDensity(atoms, subdomain);
 
             // print statistics to console
             util::printTable<4>(step,
@@ -358,13 +362,15 @@ void runLennardJones_idealGas_localCap(Config& config)
                              p,
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms,
-                             rhoInstant,
-                             rhoReservoir);
+                             rhoInstantLeft,
+                             rhoInstantRight,
+                             rhoReservoir[0][0],
+                             rhoReservoir[0][1]);
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << atoms.numLocalAtoms << " " << atoms.numGhostAtoms
-                  << " " << rhoInstant << " " << rhoReservoir << std::endl;
+                  << " " << rhoReservoir[0][0] << " " << rhoReservoir[0][1] << std::endl;
         }
     }
     if (config.bOutput)

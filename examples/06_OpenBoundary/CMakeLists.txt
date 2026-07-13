@@ -27,31 +27,3 @@ add_executable(06_LennardJones_FluxBoundary_NonEquilibrium
 target_link_libraries(06_LennardJones_FluxBoundary_NonEquilibrium
         PRIVATE mrmd CLI11::CLI11
         )
-
-add_executable(06_OutfluxBoundary
-        06_OutfluxBoundary.cpp
-        )
-target_link_libraries(06_OutfluxBoundary
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(06_IdealGas_InfluxBoundary
-        06_IdealGas_InfluxBoundary.cpp
-        )
-target_link_libraries(06_IdealGas_InfluxBoundary
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(06_IdealGas_FluxBoundary
-        06_IdealGas_FluxBoundary.cpp
-        )
-target_link_libraries(06_IdealGas_FluxBoundary
-        PRIVATE mrmd CLI11::CLI11
-        )
-
-add_executable(06_IdealGas_FluxBoundary_NVE
-        06_IdealGas_FluxBoundary_NVE.cpp
-        )
-target_link_libraries(06_IdealGas_FluxBoundary_NVE
-        PRIVATE mrmd CLI11::CLI11
-        )
