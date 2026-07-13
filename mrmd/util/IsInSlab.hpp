@@ -50,26 +50,26 @@ public:
              const real_t tolerance = 0_r)
         : slabMin_(slabMin), slabMax_(slabMax), axis_(axis), tolerance_(tolerance)
     {
+        MRMD_HOST_CHECK_GREATEREQUAL(slabMax, slabMin);
+    }
+
+    real_t getVolume(const data::Subdomain& subdomain) const
+    {
+        real_t volume = 1_r;
+
+        for (auto dim = 0; dim < DIMENSIONS; ++dim)
+        {
+            if (dim == to_underlying(axis_))
+            {
+                volume *= slabMax_ - slabMin_;
+            }
+            else
+            {
+                volume *= subdomain.maxCorner[dim] - subdomain.minCorner[dim];
+            }
+        }
+        return volume;
     }
 };
-
-template <OnePositionPredicate Pred>
-real_t calcDensity_if(const data::Atoms& atoms, Pred& pred, const real_t volume)
-{
-    auto pos = atoms.getPos();
-    auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
-    auto kernel = KOKKOS_LAMBDA(const idx_t& idx, real_t& count)
-    {
-        if (pred(pos(idx, 0), pos(idx, 1), pos(idx, 2)))
-        {
-            count += 1_r;
-        }
-    };
-
-    real_t count = 0_r;
-    Kokkos::parallel_reduce("calc-density", policy, kernel, count);
-
-    return count / volume;
-}
 }  // namespace util
 }  // namespace mrmd
