@@ -82,11 +82,12 @@ struct Config
         60;  ///< estimated maximum number of neighbors per atom
 
     // thermostat parameters
-    real_t temperature =
+    real_t reservoirTemperature =
         1.5_r;  ///< target temperature in reduced units
-    real_t gamma = 100_r;  ///< friction coefficient for Langevin thermostat
+    real_t reservoirFriction = 100_r;  ///< friction coefficient for Langevin thermostat
 
     // chemostat parameters
+    real_t reservoirTargetDensity = 0.370_r;  ///< target density in reduced units
     real_t reservoirDensityFeedback =
         0.002_r;  ///< feedback gain for reservoir density control (0 disables control)
 
@@ -167,9 +168,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     const auto volume = subdomain.getVolume();
 
     // calculate and print initial density
-    auto rhoTarget = real_c(atoms.numLocalAtoms) / volume;
-    auto rhoReservoir = rhoTarget;
-    std::cout << "rho target: " << rhoTarget << std::endl;
+    auto rhoReservoir = config.reservoirTargetDensity;
+    std::cout << "rho target: " << config.reservoirTargetDensity << std::endl;
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -193,10 +193,10 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(config.reservoirFriction, config.reservoirTemperature);
 
     // set up thermodynamic force for density control
-    action::ThermodynamicForce thermodynamicForce({rhoTarget},
+    action::ThermodynamicForce thermodynamicForce({config.reservoirTargetDensity},
                                                   subdomain,
                                                   config.densityBinWidth,
                                                   {config.thermodynamicForceModulation},
@@ -244,12 +244,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
 
         const auto rhoInstant = analysis::getDensity(atoms, subdomain);
-        //rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
-        //rhoReservoir = std::max(0_r, rhoReservoir);
+        rhoReservoir += config.reservoirDensityFeedback * (config.reservoirTargetDensity - rhoInstant);
+        rhoReservoir = std::max(0_r, rhoReservoir);
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperature, rhoTarget, config.mass, config.dt);
+            atoms, subdomain, config.reservoirTemperature, rhoReservoir, config.mass, config.dt);
 
         // reset displacement
         maxAtomDisplacement = 0_r;
@@ -380,6 +380,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
+         << ", " << config.reservoirTemperature << ", " << config.reservoirFriction << ", " << config.reservoirTargetDensity
          << std::endl;
     fout.close();
 }
@@ -400,11 +401,12 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
-    app.add_option("--temp", config.temperature, "target temperature");
-    app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
-    //app.add_option("--density-feedback",
-    //               config.reservoirDensityFeedback,
-    //               "feedback gain for reservoir density control (0 disables)");
+    app.add_option("--temp", config.reservoirTemperature, "target temperature");
+    app.add_option("--friction", config.reservoirFriction, "friction coefficient for langevin thermostat");
+    app.add_option("--density", config.reservoirTargetDensity, "target density");
+    app.add_option("--density-feedback",
+                   config.reservoirDensityFeedback,
+                   "feedback gain for reservoir density control (0 disables)");
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
