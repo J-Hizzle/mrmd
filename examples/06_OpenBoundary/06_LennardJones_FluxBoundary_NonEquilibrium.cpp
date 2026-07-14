@@ -47,7 +47,6 @@
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
-#include "util/simulationSetup.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/IsInSlab.hpp"
 

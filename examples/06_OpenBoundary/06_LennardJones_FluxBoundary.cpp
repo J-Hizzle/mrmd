@@ -43,10 +43,10 @@
 #include "io/DumpGRO.hpp"
 #include "io/DumpProfile.hpp"
 #include "io/DumpThermoForce.hpp"
+#include "io/RestoreGRO.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
-#include "util/simulationSetup.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 
 using namespace mrmd;
@@ -56,9 +56,12 @@ using namespace mrmd;
  */
 struct Config
 {
+    // input file parameters
+    std::string fileRestoreGRO = "equilibrateLangevin_rho370_T15_x30_yz30_2026_07_12.gro";
+
     // simulation time parameters
     idx_t nsteps = 400001;               ///< number of steps to simulate
-    real_t dt = 0.002;  ///< time step size in reduced units
+    real_t dt = 0.002_r;  ///< time step size in reduced units
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -77,10 +80,6 @@ struct Config
         1_r;  ///< ratio of cell size on Cartesian grid to cutoff radius for neighbor list
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
-
-    // system parameters
-    static constexpr idx_t numAtoms = 9990;  ///< number of atoms in the simulation
-    real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
 
     // thermostat parameters
     real_t temperature =
@@ -124,13 +123,21 @@ struct Config
 void runLennardJones_idealGas_localCap(Config& config)
 {
     // initialize simulation domain
-    data::Subdomain subdomain({0_r, 0_r, 0_r},
-                              {config.Lx, config.Lx, config.Lx},
+    auto subdomainTmp = data::Subdomain({0_r, 0_r, 0_r}, {0_r, 0_r, 0_r}, config.neighborCutoff);
+
+    // initialize atoms randomly in the domain
+    auto atoms = data::Atoms(0);
+
+    // restore initial phase point from file
+    io::restoreGRO(config.fileRestoreGRO, subdomainTmp, atoms);
+
+    data::Subdomain subdomain(subdomainTmp.minCorner,
+                              subdomainTmp.maxCorner,
                               Kokkos::Array<data::Subdomain::BoundaryCondition, 3>{
                                   data::Subdomain::BoundaryCondition::OPEN,
                                   data::Subdomain::BoundaryCondition::PERIODIC,
                                   data::Subdomain::BoundaryCondition::PERIODIC},
-                              config.r_cut);
+                              config.neighborCutoff);
 
     std::cout
         << "boundaryCondition x: "
@@ -158,10 +165,6 @@ void runLennardJones_idealGas_localCap(Config& config)
 
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
-
-    // initialize atoms randomly in the domain
-    auto atoms =
-        util::fillDomainWithThermalizedAtoms(subdomain, config.numAtoms, config.mass, config.temperature);
 
     // calculate and print initial density
     auto rhoTarget = real_c(atoms.numLocalAtoms) / volume;
@@ -399,9 +402,9 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--temp", config.temperature, "target temperature");
     app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
-    app.add_option("--density-feedback",
-                   config.reservoirDensityFeedback,
-                   "feedback gain for reservoir density control (0 disables)");
+    //app.add_option("--density-feedback",
+    //               config.reservoirDensityFeedback,
+    //               "feedback gain for reservoir density control (0 disables)");
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
