@@ -33,6 +33,7 @@
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
 #include "analysis/SystemMomentum.hpp"
+#include "analysis/Density.hpp"
 #include "communication/GhostLayer.hpp"
 #include "communication/OpenBoundaryLayer.hpp"
 #include "data/Atoms.hpp"
@@ -239,13 +240,13 @@ void runLennardJones_idealGas_localCap(Config& config)
         // remove atoms that left the domain through the open boundary
         openBoundaryLayer.removeOpenBoundaryAtoms(atoms, subdomain);
 
-        const auto rhoInstant = real_c(atoms.numLocalAtoms) / volume;
-        rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
-        rhoReservoir = std::max(0_r, rhoReservoir);
+        const auto rhoInstant = analysis::getDensity(atoms, subdomain);
+        //rhoReservoir += config.reservoirDensityFeedback * (rhoTarget - rhoInstant);
+        //rhoReservoir = std::max(0_r, rhoReservoir);
 
         // insert atoms that entered the domain through the open boundary
         openBoundaryLayer.insertOpenBoundaryAtoms(
-            atoms, subdomain, config.temperature, rhoReservoir, config.mass, config.dt);
+            atoms, subdomain, config.temperature, rhoTarget, config.mass, config.dt);
 
         // reset displacement
         maxAtomDisplacement = 0_r;
