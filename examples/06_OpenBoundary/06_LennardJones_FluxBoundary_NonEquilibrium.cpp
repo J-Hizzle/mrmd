@@ -223,6 +223,8 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                   config.thermoForceRegionMax,
                                                   AXIS::X,
                                                   std::numeric_limits<real_t>::epsilon());
+    util::IsInSlab isInDensitySamplingRegionRight(config.thermostatRegionMinRight - 1_r,
+                                                 config.thermostatRegionMinRight);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -257,11 +259,12 @@ void runLennardJones_idealGas_localCap(Config& config)
         // calculate instantaneous densities
         const auto rhoInstantLeft = analysis::getDensity_if(atoms, subdomain, isInThermostatRegionLeft);
         const auto rhoInstantRight = analysis::getDensity_if(atoms, subdomain, isInThermostatRegionRight);
+        const auto rhoTargetRight = analysis::getDensity_if(atoms, subdomain, isInDensitySamplingRegionRight);
 
         rhoReservoir[0][0] += config.reservoirDensityFeedback * (config.reservoirDensity[0][0] - rhoInstantLeft);
         rhoReservoir[0][0] = std::max(0_r, rhoReservoir[0][0]);
 
-        rhoReservoir[0][1] += config.reservoirDensityFeedback * (config.reservoirDensity[0][1] - rhoInstantRight);
+        rhoReservoir[0][1] += config.reservoirDensityFeedback * (rhoTargetRight - rhoInstantRight);
         rhoReservoir[0][1] = std::max(0_r, rhoReservoir[0][1]);
 
         // insert atoms that entered the domain through the open boundary
