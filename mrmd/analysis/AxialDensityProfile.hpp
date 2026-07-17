@@ -37,5 +37,42 @@ data::MultiHistogram getAxialDensityProfile(const idx_t numAtoms,
                                             const int64_t numBins,
                                             const AXIS axis);
 
+class DensityProfile
+{
+private:
+    data::MultiHistogram densityProfile_;
+    real_t binVolume_;
+    idx_t densityProfileSamples_ = 0;
+    idx_t numTypes_;
+    AXIS axis_;
+
+public:
+    void sampleParticleNumberProfile(const data::Atoms& atoms)
+    {
+        densityProfile_ += getAxialDensityProfile(atoms.numLocalAtoms,
+                                                  atoms.getPos(),
+                                                  atoms.getType(),
+                                                  numTypes_,
+                                                  densityProfile_.min,
+                                                  densityProfile_.max,
+                                                  densityProfile_.numBins,
+                                                  axis_);
+        densityProfileSamples_++;
+    }
+
+    void average()
+    {
+        auto normalizationFactor = 1_r / (binVolume_ * real_c(densityProfileSamples_));
+        densityProfile_.scale(normalizationFactor);
+    }
+
+    void reset()
+    {
+        Kokkos::deep_copy(densityProfile_.data, 0_r);
+        densityProfileSamples_ = 0;
+    }
+
+    data::MultiHistogram& getAverageDensityProfile() { return densityProfile_; }
+};
 }  // namespace analysis
 }  // namespace mrmd
