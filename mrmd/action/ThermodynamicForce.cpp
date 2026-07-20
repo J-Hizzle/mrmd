@@ -73,7 +73,7 @@ ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
 
 void ThermodynamicForce::sample(data::Atoms& atoms)
 {
-    densityProfile_ += analysis::getAxialDensityProfile(atoms.numLocalAtoms,
+    densityProfile_ += analysis::getAxialParticleNumberProfile(atoms.numLocalAtoms,
                                                         atoms.getPos(),
                                                         atoms.getType(),
                                                         numTypes_,

@@ -18,7 +18,7 @@ namespace mrmd
 {
 namespace analysis
 {
-data::MultiHistogram getAxialDensityProfile(const idx_t numAtoms,
+data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
                                             const data::Atoms::pos_t& positions,
                                             const data::Atoms::type_t& types,
                                             const int64_t numTypes,
