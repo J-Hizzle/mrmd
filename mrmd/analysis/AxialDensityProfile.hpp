@@ -29,20 +29,20 @@ namespace analysis
  * Out-of-bounds values are discarded.
  */
 data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
-                                            const data::Atoms::pos_t& positions,
-                                            const data::Atoms::type_t& types,
-                                            const int64_t numTypes,
-                                            const real_t min,
-                                            const real_t max,
-                                            const int64_t numBins,
-                                            const AXIS axis);
+                                                   const data::Atoms::pos_t& positions,
+                                                   const data::Atoms::type_t& types,
+                                                   const int64_t numTypes,
+                                                   const real_t min,
+                                                   const real_t max,
+                                                   const int64_t numBins,
+                                                   const AXIS axis);
 
 class DensityProfile
 {
 private:
     data::MultiHistogram cumulativeParticleNumberProfile_;
     idx_t particleNumberProfileSamples_ = 0;
-    data::MultiHistogram densityProfile_;
+    data::MultiHistogram averageDensityProfile_;
     real_t binVolume_;
     idx_t numTypes_;
     AXIS axis_;
@@ -50,32 +50,33 @@ private:
 public:
     void sampleParticleNumberProfile(const data::Atoms& atoms)
     {
-        cumulativeParticleNumberProfile_ += getAxialParticleNumberProfile(atoms.numLocalAtoms,
-                                                  atoms.getPos(),
-                                                  atoms.getType(),
-                                                  numTypes_,
-                                                  cumulativeParticleNumberProfile_.min,
-                                                  cumulativeParticleNumberProfile_.max,
-                                                  cumulativeParticleNumberProfile_.numBins,
-                                                  axis_);
+        cumulativeParticleNumberProfile_ +=
+            getAxialParticleNumberProfile(atoms.numLocalAtoms,
+                                          atoms.getPos(),
+                                          atoms.getType(),
+                                          numTypes_,
+                                          cumulativeParticleNumberProfile_.min,
+                                          cumulativeParticleNumberProfile_.max,
+                                          cumulativeParticleNumberProfile_.numBins,
+                                          axis_);
         particleNumberProfileSamples_++;
     }
 
     void calcAverageDensityProfile()
     {
         auto normalizationFactor = 1_r / (binVolume_ * real_c(particleNumberProfileSamples_));
-        Kokkos::deep_copy(densityProfile_.data, cumulativeParticleNumberProfile_.data);
-        densityProfile_.scale(normalizationFactor);
+        Kokkos::deep_copy(averageDensityProfile_.data, cumulativeParticleNumberProfile_.data);
+        averageDensityProfile_.scale(normalizationFactor);
         Kokkos::deep_copy(cumulativeParticleNumberProfile_.data, 0_r);
         particleNumberProfileSamples_ = 0;
     }
 
-    inline auto getDensityProfile() const { return densityProfile_; }
+    inline auto getDensityProfile() const { return averageDensityProfile_; }
     inline auto getDensityProfile(const idx_t& typeId) const
     {
         assert(typeId < numTypes_);
         assert(typeId >= 0);
-        return Kokkos::subview(densityProfile_.data, Kokkos::ALL(), typeId);
+        return Kokkos::subview(averageDensityProfile_.data, Kokkos::ALL(), typeId);
     }
 
     DensityProfile(const real_t min,
@@ -84,12 +85,9 @@ public:
                    const real_t binVolume,
                    const idx_t numTypes,
                    const AXIS axis)
-        : cumulativeParticleNumberProfile_("cumulative-particle-number-profile",
-                                            min,
-                                            max,
-                                            numBins,
-                                            numTypes),
-          densityProfile_("density-profile", cumulativeParticleNumberProfile_),
+        : cumulativeParticleNumberProfile_(
+              "cumulative-particle-number-profile", min, max, numBins, numTypes),
+          averageDensityProfile_("density-profile", cumulativeParticleNumberProfile_),
           binVolume_(binVolume),
           numTypes_(numTypes),
           axis_(axis)
