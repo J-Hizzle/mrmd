@@ -33,12 +33,9 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
              subdomain.maxCorner[0],
              idx_c(std::ceil(subdomain.diameter[0] / requestedDensityBinWidth)),
              idx_c(targetDensity.size())),
-      densityProfile_("density-profile", force_),
-      binVolume_(subdomain.diameter[1] * subdomain.diameter[2] * densityProfile_.binSize),
       targetDensity_(targetDensity),
       thermodynamicForceModulation_(thermodynamicForceModulation),
       forceFactor_("force-factor", targetDensity.size()),
-      enforceSymmetry_(enforceSymmetry),
       usePeriodicity_(usePeriodicity)
 {
     MRMD_HOST_CHECK_LESSEQUAL(
@@ -71,23 +68,9 @@ ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
 {
 }
 
-void ThermodynamicForce::sample(data::Atoms& atoms)
+void ThermodynamicForce::update(const data::MultiHistogram& densityProfile, const real_t& smoothingSigma, const real_t& smoothingIntensity)
 {
-    densityProfile_ += analysis::getAxialParticleNumberProfile(atoms.numLocalAtoms,
-                                                        atoms.getPos(),
-                                                        atoms.getType(),
-                                                        numTypes_,
-                                                        densityProfile_.min,
-                                                        densityProfile_.max,
-                                                        densityProfile_.numBins,
-                                                        AXIS::X);
-
-    ++densityProfileSamples_;
-}
-
-void ThermodynamicForce::update(const real_t& smoothingSigma, const real_t& smoothingIntensity)
-{
-    update_if(smoothingSigma, smoothingIntensity, KOKKOS_LAMBDA(const real_t) { return true; });
+    update_if(densityProfile, smoothingSigma, smoothingIntensity, KOKKOS_LAMBDA(const real_t) { return true; });
 }
 
 void ThermodynamicForce::apply(const data::Atoms& atoms) const

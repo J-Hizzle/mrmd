@@ -122,7 +122,7 @@ data::MultiHistogram gradient(const data::MultiHistogram& input, const bool peri
  * @param periodic treat boundaries as periodic
  * @return smoothened histogram
  */
-data::MultiHistogram smoothen(data::MultiHistogram& input,
+data::MultiHistogram smoothen(const data::MultiHistogram& input,
                               const real_t& sigma,
                               const real_t& range,
                               const bool periodic = false);
