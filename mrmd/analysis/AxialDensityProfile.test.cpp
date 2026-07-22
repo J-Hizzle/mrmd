@@ -85,7 +85,8 @@ TEST(AxialDensityProfile, sample)
     densityProfile.calcAverageDensityProfile();
 
     auto averageDensityProfile = densityProfile.getAverageDensityProfile();
-    auto h_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), averageDensityProfile.data);
+    auto h_data =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), averageDensityProfile.data);
 
     for (auto i = 0; i < 10; ++i)
     {
@@ -95,7 +96,7 @@ TEST(AxialDensityProfile, sample)
     }
 }
 
-TEST(AxialDensityProfile, sampleSymmetry)
+TEST(AxialDensityProfile, sampleSymmetric)
 {
     auto atoms = initAtoms();
     DensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X, true);
@@ -104,7 +105,8 @@ TEST(AxialDensityProfile, sampleSymmetry)
     densityProfile.calcAverageDensityProfile();
 
     auto averageDensityProfile = densityProfile.getAverageDensityProfile();
-    auto h_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), averageDensityProfile.data);
+    auto h_data =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), averageDensityProfile.data);
 
     for (auto i = 0; i < 10; ++i)
     {
