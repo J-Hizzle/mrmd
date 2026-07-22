@@ -92,7 +92,7 @@ struct MultiHistogram
 };
 
 /**
- * Add new item to the comulative moving average.
+ * Add new item to the cumulative moving average.
  *
  * @param average averaged histogram (output)
  * @param current current value
