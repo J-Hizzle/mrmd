@@ -47,8 +47,7 @@ private:
     idx_t numTypes_;
     AXIS axis_;
 
-    bool enforceSymmetry_ = false;
-    bool usePeriodicity_ = false;
+    const bool enforceSymmetry_;
 
 public:
     void sampleParticleNumberProfile(const data::Atoms& atoms)
@@ -69,14 +68,14 @@ public:
     {
         MRMD_HOST_CHECK_GREATER(particleNumberProfileSamples_, 0);
 
-        if (enforceSymmetry_)
-        {
-            cumulativeParticleNumberProfile_.makeSymmetric();
-        }
-
         auto normalizationFactor = 1_r / (binVolume_ * real_c(particleNumberProfileSamples_));
         Kokkos::deep_copy(averageDensityProfile_.data, cumulativeParticleNumberProfile_.data);
         averageDensityProfile_.scale(normalizationFactor);
+
+        if (enforceSymmetry_)
+        {
+            averageDensityProfile_.makeSymmetric();
+        }
 
         Kokkos::deep_copy(cumulativeParticleNumberProfile_.data, 0_r);
         particleNumberProfileSamples_ = 0;
@@ -95,19 +94,19 @@ public:
                    const idx_t numBins,
                    const real_t binVolume,
                    const idx_t numTypes,
-                   const AXIS axis)
+                   const AXIS axis,
+                   const bool enforceSymmetry = false)
         : cumulativeParticleNumberProfile_(
               "cumulative-particle-number-profile", min, max, numBins, numTypes),
           averageDensityProfile_("average-density-profile", cumulativeParticleNumberProfile_),
           binVolume_(binVolume),
           numTypes_(numTypes),
-          axis_(axis)
+          axis_(axis),
+          enforceSymmetry_(enforceSymmetry)
     {
         MRMD_HOST_CHECK_GREATEREQUAL(max, min);
         MRMD_HOST_CHECK_GREATER(numTypes, 0);
     }
 };
-
-USE CUMULATIVE MOVING AVERAGE FOR DENSITY PROFILE
 }  // namespace analysis
 }  // namespace mrmd
