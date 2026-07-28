@@ -37,7 +37,7 @@ data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
                                                    const int64_t numBins,
                                                    const AXIS axis);
 
-class DensityProfile
+class AxialDensityProfile
 {
 private:
     data::MultiHistogram cumulativeAverageParticleNumberProfile_;
@@ -50,39 +50,9 @@ private:
     const bool enforceSymmetry_;
 
 public:
-    void sampleParticleNumberProfile(const data::Atoms& atoms)
-    {
-        cumulativeMovingAverage(
-            cumulativeAverageParticleNumberProfile_,
-            getAxialParticleNumberProfile(atoms.numLocalAtoms,
-                                          atoms.getPos(),
-                                          atoms.getType(),
-                                          numTypes_,
-                                          cumulativeAverageParticleNumberProfile_.min,
-                                          cumulativeAverageParticleNumberProfile_.max,
-                                          cumulativeAverageParticleNumberProfile_.numBins,
-                                          axis_),
-            particleNumberProfileSamples_);
-        particleNumberProfileSamples_++;
-    }
+    void sampleParticleNumberProfile(const data::Atoms& atoms);
 
-    void updateAverageDensityProfile()
-    {
-        MRMD_HOST_CHECK_GREATER(particleNumberProfileSamples_, 0);
-
-        auto normalizationFactor = 1_r / binVolume_;
-        Kokkos::deep_copy(averageDensityProfile_.data,
-                          cumulativeAverageParticleNumberProfile_.data);
-        averageDensityProfile_.scale(normalizationFactor);
-
-        if (enforceSymmetry_)
-        {
-            averageDensityProfile_.makeSymmetric();
-        }
-
-        Kokkos::deep_copy(cumulativeAverageParticleNumberProfile_.data, 0_r);
-        particleNumberProfileSamples_ = 0;
-    }
+    void updateAverageDensityProfile();
 
     inline auto getAverageDensityProfile() const { return averageDensityProfile_; }
     inline auto getAverageDensityProfile(const idx_t& typeId) const
@@ -92,25 +62,13 @@ public:
         return Kokkos::subview(averageDensityProfile_.data, Kokkos::ALL(), typeId);
     }
 
-    DensityProfile(const real_t min,
+    AxialDensityProfile(const real_t min,
                    const real_t max,
                    const idx_t numBins,
                    const real_t binVolume,
                    const idx_t numTypes,
                    const AXIS axis,
-                   const bool enforceSymmetry = false)
-        : cumulativeAverageParticleNumberProfile_(
-              "cumulative-average-particle-number-profile", min, max, numBins, numTypes),
-          averageDensityProfile_("average-density-profile",
-                                 cumulativeAverageParticleNumberProfile_),
-          binVolume_(binVolume),
-          numTypes_(numTypes),
-          axis_(axis),
-          enforceSymmetry_(enforceSymmetry)
-    {
-        MRMD_HOST_CHECK_GREATEREQUAL(max, min);
-        MRMD_HOST_CHECK_GREATER(numTypes, 0);
-    }
+                   const bool enforceSymmetry = false);
 };
 }  // namespace analysis
 }  // namespace mrmd
