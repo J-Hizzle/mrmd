@@ -79,7 +79,7 @@ TEST(AxialDensityProfile, histogram)
 TEST(AxialDensityProfile, sample)
 {
     auto atoms = initAtoms();
-    DensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X);
+    AxialDensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X);
 
     densityProfile.sampleParticleNumberProfile(atoms);
     densityProfile.updateAverageDensityProfile();
@@ -99,7 +99,7 @@ TEST(AxialDensityProfile, sample)
 TEST(AxialDensityProfile, sampleSymmetric)
 {
     auto atoms = initAtoms();
-    DensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X, true);
+    AxialDensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X, true);
 
     densityProfile.sampleParticleNumberProfile(atoms);
     densityProfile.updateAverageDensityProfile();

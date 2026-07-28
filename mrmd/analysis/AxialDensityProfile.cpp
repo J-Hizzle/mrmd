@@ -56,7 +56,7 @@ AxialDensityProfile::AxialDensityProfile(const real_t min,
                                          const real_t binVolume,
                                          const idx_t numTypes,
                                          const AXIS axis,
-                                         const bool enforceSymmetry = false)
+                                         const bool enforceSymmetry)
     : cumulativeAverageParticleNumberProfile_(
           "cumulative-average-particle-number-profile", min, max, numBins, numTypes),
       averageDensityProfile_("average-density-profile", cumulativeAverageParticleNumberProfile_),

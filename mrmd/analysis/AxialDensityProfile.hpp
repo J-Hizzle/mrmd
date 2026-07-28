@@ -63,12 +63,12 @@ public:
     }
 
     AxialDensityProfile(const real_t min,
-                   const real_t max,
-                   const idx_t numBins,
-                   const real_t binVolume,
-                   const idx_t numTypes,
-                   const AXIS axis,
-                   const bool enforceSymmetry = false);
+                        const real_t max,
+                        const idx_t numBins,
+                        const real_t binVolume,
+                        const idx_t numTypes,
+                        const AXIS axis,
+                        const bool enforceSymmetry = false);
 };
 }  // namespace analysis
 }  // namespace mrmd
