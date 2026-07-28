@@ -24,13 +24,13 @@ namespace action
 {
 ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityBinWidth,
+                                       const real_t& requestedBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulation,
                                        const bool usePeriodicity)
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
              subdomain.maxCorner[0],
-             idx_c(std::ceil(subdomain.diameter[0] / requestedDensityBinWidth)),
+             idx_c(std::ceil(subdomain.diameter[0] / requestedBinWidth)),
              idx_c(targetDensity.size())),
       targetDensity_(targetDensity),
       thermodynamicForceModulation_(thermodynamicForceModulation),
@@ -38,7 +38,7 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
       usePeriodicity_(usePeriodicity)
 {
     MRMD_HOST_CHECK_LESSEQUAL(
-        force_.binSize, requestedDensityBinWidth, "requested bin size is not achieved");
+        force_.binSize, requestedBinWidth, "requested bin size is not achieved");
 
     MRMD_HOST_CHECK_EQUAL(targetDensity.size(), thermodynamicForceModulation.size());
     numTypes_ = idx_c(targetDensity.size());
@@ -54,12 +54,12 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
 
 ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityBinWidth,
+                                       const real_t& requestedBinWidth,
                                        const real_t thermodynamicForceModulation,
                                        const bool usePeriodicity)
     : ThermodynamicForce(std::vector<real_t>{targetDensity},
                          subdomain,
-                         requestedDensityBinWidth,
+                         requestedBinWidth,
                          {thermodynamicForceModulation},
                          usePeriodicity)
 {
