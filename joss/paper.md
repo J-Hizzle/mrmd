@@ -169,8 +169,7 @@ of this manuscript, or the preparation of supporting materials.
 
 # Acknowledgements
 
-Julian F. Hille's contributions to this software have been funded by Deutsche Forschungsgemeinschaft (DFG) through grant CRC 1114 Scaling Cas-
-cades in Complex Systems, Project Number 235221301, Project C01 Adaptive coupling of scales in molecular dynamics
+Julian F. Hille's contributions to this software have been funded by Deutsche Forschungsgemeinschaft (DFG) through grant CRC 1114 Scaling Cascades in Complex Systems, Project Number 235221301, Project C01 Adaptive coupling of scales in molecular dynamics
 and beyond to fluid dynamics.
 
 # References
