@@ -98,7 +98,7 @@ void AxialDensityProfile::sampleParticleNumberProfile(const data::Atoms& atoms)
                                       cumulativeAverageParticleNumberProfile_.max,
                                       cumulativeAverageParticleNumberProfile_.numBins,
                                       axis_),
-        particleNumberProfileSamples_);
+        real_c(particleNumberProfileSamples_));
     particleNumberProfileSamples_++;
 }
 
