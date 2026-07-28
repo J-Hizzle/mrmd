@@ -9,11 +9,11 @@ tags:
 authors:
   - name: Sebastian Eibl
     orcid: 0000-0002-1069-2720
-    #equal-contrib: true
+    equal-contrib: true
     affiliation: 1
-  - name: Julian Friedrich Hille
+  - name: Julian F. Hille
     orcid: 0009-0008-1005-9053
-    #equal-contrib: true
+    equal-contrib: true
     affiliation: 2
 affiliations:
  - name: Max Planck Computing and Data Facility, Germany
@@ -52,7 +52,7 @@ to standard packages in molecular simulation such as `Gromacs` and `MDAnalysis`.
 
 `MRMD` was designed to be used by researchers in the field of open molecular systems and developers of 
 the AdResS method. It has been used in a scientific publication concerned with linking the simulation method 
-with the theoretical model of the Liouville-type hierarchy [link CAMCoS paper] and, in turn, motivating 
+with the theoretical model of the Liouville-type hierarchy [@hille_reframing_2026] and, in turn, motivating 
 algorithmic improvements. The parallel and modular design built around AdResS will facilitate straight-
 forward development of the method and help in establishing AdResS as a standard tool of molecular simulation.    
 
@@ -99,7 +99,7 @@ transformations that are relevant for Galactic dynamics and Milky Way research.
 Being in its first release version and developed mostly as a two-person project, `MRMD` has 
 already been applied as the primary numerical tool of investigation in a study concerned 
 with improving the iterative procedure employed in the setup stage of any AdResS simulation
-[cite CAMCoS paper]. With regards to the FAIR principles of scientific data management,
+[@hille_reframing_2026]. With regards to the FAIR principles of scientific data management,
 the simulations run in this publication have been integrated into the release version
 of `MRMD` as test-covered tutorial scripts and can be reproduced with minimal effort. 
 
