@@ -116,36 +116,6 @@ TEST(ThermodynamicForce, getGrid)
     };
 }
 
-// TEST(ThermodynamicForce, sample)
-//{
-//     auto atoms = getAtoms();
-//     auto thermodynamicForce = getThermodynamicForce();
-//
-//     thermodynamicForce.sample(atoms);
-//
-//     auto h_densityProfile = Kokkos::create_mirror_view_and_copy(
-//         Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-//     for (idx_t idx = 0; idx < h_densityProfile.extent(0); ++idx)
-//     {
-//         EXPECT_FLOAT_EQ(h_densityProfile(idx), 10_r);
-//     };
-// }
-
-// TEST(ThermodynamicForce, sampleNonuniform)
-//{
-//     auto atoms = getAtomsNonuniform();
-//     auto thermodynamicForce = getThermodynamicForce();
-//
-//     thermodynamicForce.sample(atoms);
-//
-//     auto h_densityProfile = Kokkos::create_mirror_view_and_copy(
-//         Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-//     for (idx_t idx = 0; idx < h_densityProfile.extent(0); ++idx)
-//     {
-//         EXPECT_FLOAT_EQ(h_densityProfile(idx), real_c(idx));
-//     };
-// }
-
 TEST(ThermodynamicForce, apply)
 {
     auto atoms = getAtoms();
