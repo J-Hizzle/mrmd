@@ -82,7 +82,7 @@ TEST(AxialDensityProfile, sample)
     DensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X);
 
     densityProfile.sampleParticleNumberProfile(atoms);
-    densityProfile.calcAverageDensityProfile();
+    densityProfile.updateAverageDensityProfile();
 
     auto averageDensityProfile = densityProfile.getAverageDensityProfile();
     auto h_data =
@@ -102,7 +102,7 @@ TEST(AxialDensityProfile, sampleSymmetric)
     DensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X, true);
 
     densityProfile.sampleParticleNumberProfile(atoms);
-    densityProfile.calcAverageDensityProfile();
+    densityProfile.updateAverageDensityProfile();
 
     auto averageDensityProfile = densityProfile.getAverageDensityProfile();
     auto h_data =

@@ -66,7 +66,7 @@ public:
         particleNumberProfileSamples_++;
     }
 
-    void calcAverageDensityProfile()
+    void updateAverageDensityProfile()
     {
         MRMD_HOST_CHECK_GREATER(particleNumberProfileSamples_, 0);
 

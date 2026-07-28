@@ -26,7 +26,6 @@ action::ThermodynamicForce restoreThermoForce(
     const data::Subdomain& subdomain,
     const std::vector<real_t>& targetDensities,
     const std::vector<real_t>& thermodynamicForceModulations,
-    const bool enforceSymmetry,
     const bool usePeriodicity,
     const idx_t maxNumForces)
 {
@@ -77,12 +76,8 @@ action::ThermodynamicForce restoreThermoForce(
     MultiView d_forces("d_forces", binNum, histNum);
     Kokkos::deep_copy(d_forces, h_forces);
 
-    action::ThermodynamicForce thermodynamicForce(targetDensities,
-                                                  subdomain,
-                                                  binWidth,
-                                                  thermodynamicForceModulations,
-                                                  enforceSymmetry,
-                                                  usePeriodicity);
+    action::ThermodynamicForce thermodynamicForce(
+        targetDensities, subdomain, binWidth, thermodynamicForceModulations, usePeriodicity);
 
     thermodynamicForce.setForce(d_forces);
 

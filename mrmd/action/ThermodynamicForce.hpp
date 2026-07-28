@@ -17,8 +17,8 @@
 
 #include <concepts>
 
-#include "assert/assert.hpp"
 #include "analysis/AxialDensityProfile.hpp"
+#include "assert/assert.hpp"
 #include "data/Atoms.hpp"
 #include "data/MultiHistogram.hpp"
 #include "data/Subdomain.hpp"
@@ -51,18 +51,19 @@ public:
     }
     inline void setForce(const MultiView& forces) const { Kokkos::deep_copy(force_.data, forces); }
 
-    void update(const data::MultiHistogram& densityProfile, const real_t& smoothingSigma, const real_t& smoothingIntensity);
+    void update(const data::MultiHistogram& densityProfile,
+                const real_t& smoothingSigma,
+                const real_t& smoothingIntensity);
     void apply(const data::Atoms& atoms) const;
 
     template <OnePositionPredicate Pred>
     void apply_if(const data::Atoms& atoms, const Pred& pred) const;
 
     template <OneCoordinatePredicate Pred>
-    void update_if(
-        const data::MultiHistogram& densityProfile,
-        const real_t& smoothingSigma,
-        const real_t& smoothingIntensity,
-        const Pred& pred);
+    void update_if(const data::MultiHistogram& densityProfile,
+                   const real_t& smoothingSigma,
+                   const real_t& smoothingIntensity,
+                   const Pred& pred);
 
     template <OnePositionPredicate Pred>
     void applyInterpolated_if(const data::Atoms& atoms, const Pred& pred) const;
@@ -74,14 +75,12 @@ public:
                        const data::Subdomain& subdomain,
                        const real_t& requestedDensityBinWidth,
                        const std::vector<real_t>& thermodynamicForceModulation,
-                       const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 
     ThermodynamicForce(const real_t targetDensity,
                        const data::Subdomain& subdomain,
                        const real_t& requestedDensityBinWidth,
                        const real_t thermodynamicForceModulation,
-                       const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 };
 
@@ -112,12 +111,19 @@ void ThermodynamicForce::apply_if(const data::Atoms& atoms, const Pred& pred) co
 }
 
 template <OneCoordinatePredicate Pred>
-void ThermodynamicForce::update_if(
-    const data::MultiHistogram& densityProfile,
-    const real_t& smoothingSigma,
-    const real_t& smoothingIntensity,
-    const Pred& pred)
+void ThermodynamicForce::update_if(const data::MultiHistogram& densityProfile,
+                                   const real_t& smoothingSigma,
+                                   const real_t& smoothingIntensity,
+                                   const Pred& pred)
 {
+    MRMD_HOST_CHECK_EQUAL(force_.numBins,
+                          densityProfile.numBins,
+                          "force and density profile must have the same number of bins");
+    MRMD_HOST_CHECK_EQUAL(force_.numHistograms,
+                          densityProfile.numHistograms,
+                          "force and density profile must have the same number of histograms");
+    MRMD_HOST_CHECK(isFloatEqual(force_.binSize, densityProfile.binSize),
+                    "bin sizes of force and density profile must match");
     auto smoothedDensityProfile =
         data::smoothen(densityProfile, smoothingSigma, smoothingIntensity, usePeriodicity_);
     auto smoothedDensityGradient = data::gradient(smoothedDensityProfile, usePeriodicity_);

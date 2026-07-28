@@ -26,7 +26,6 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
                                        const data::Subdomain& subdomain,
                                        const real_t& requestedDensityBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulation,
-                                       const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
@@ -57,20 +56,23 @@ ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
                                        const data::Subdomain& subdomain,
                                        const real_t& requestedDensityBinWidth,
                                        const real_t thermodynamicForceModulation,
-                                       const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : ThermodynamicForce(std::vector<real_t>{targetDensity},
                          subdomain,
                          requestedDensityBinWidth,
                          {thermodynamicForceModulation},
-                         enforceSymmetry,
                          usePeriodicity)
 {
 }
 
-void ThermodynamicForce::update(const data::MultiHistogram& densityProfile, const real_t& smoothingSigma, const real_t& smoothingIntensity)
+void ThermodynamicForce::update(const data::MultiHistogram& densityProfile,
+                                const real_t& smoothingSigma,
+                                const real_t& smoothingIntensity)
 {
-    update_if(densityProfile, smoothingSigma, smoothingIntensity, KOKKOS_LAMBDA(const real_t) { return true; });
+    update_if(
+        densityProfile, smoothingSigma, smoothingIntensity, KOKKOS_LAMBDA(const real_t) {
+            return true;
+        });
 }
 
 void ThermodynamicForce::apply(const data::Atoms& atoms) const
