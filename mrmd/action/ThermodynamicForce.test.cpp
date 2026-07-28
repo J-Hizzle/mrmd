@@ -195,33 +195,32 @@ TEST(ThermodynamicForce, update)
     };
 }
 
-// TEST(ThermodynamicForce, update_if)
-//{
-//     auto atoms = getAtomsNonuniform();
-//     auto thermodynamicForce = getThermodynamicForce();
-//
-//     thermodynamicForce.sample(atoms);
-//
-//     thermodynamicForce.update_if(1_r, 0_r, TestPredicate{0.51_r, 4.49_r});
-//
-//     auto forceHistogram = thermodynamicForce.getForce();
-//
-//     auto h_force =
-//         Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), thermodynamicForce.getForce(0));
-//     auto h_grid =
-//         Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), createGrid(forceHistogram));
-//     for (idx_t idx = 0; idx < forceHistogram.numBins; ++idx)
-//     {
-//         if (h_grid(idx) > 0.51_r &&
-//             h_grid(idx) < 4.49_r)  // only bins corresponding to the predicate should be updated
-//         {
-//             EXPECT_FLOAT_EQ(h_force(idx), real_c(idx) - 1_r);
-//         }
-//         else
-//         {
-//             EXPECT_FLOAT_EQ(h_force(idx), real_c(idx));
-//         }
-//     };
-// }
+TEST(ThermodynamicForce, update_if)
+{
+    auto atoms = getAtomsNonuniform();
+    auto thermodynamicForce = getThermodynamicForce();
+
+    auto densityProfile = getDensityProfile();
+    thermodynamicForce.update_if(densityProfile, 1_r, 0_r, TestPredicate{0.51_r, 4.49_r});
+
+    auto forceHistogram = thermodynamicForce.getForce();
+
+    auto h_force =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), thermodynamicForce.getForce(0));
+    auto h_grid =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), createGrid(forceHistogram));
+    for (idx_t idx = 0; idx < forceHistogram.numBins; ++idx)
+    {
+        if (h_grid(idx) > 0.51_r &&
+            h_grid(idx) < 4.49_r)  // only bins corresponding to the predicate should be updated
+        {
+            EXPECT_FLOAT_EQ(h_force(idx), real_c(idx) - 1_r);
+        }
+        else
+        {
+            EXPECT_FLOAT_EQ(h_force(idx), real_c(idx));
+        }
+    };
+}
 }  // namespace action
 }  // namespace mrmd
