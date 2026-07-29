@@ -73,13 +73,13 @@ public:
 
     ThermodynamicForce(const std::vector<real_t>& targetDensity,
                        const data::Subdomain& subdomain,
-                       const real_t& requestedDensityBinWidth,
+                       const real_t& requestedBinWidth,
                        const std::vector<real_t>& thermodynamicForceModulation,
                        const bool usePeriodicity = false);
 
     ThermodynamicForce(const real_t targetDensity,
                        const data::Subdomain& subdomain,
-                       const real_t& requestedDensityBinWidth,
+                       const real_t& requestedBinWidth,
                        const real_t thermodynamicForceModulation,
                        const bool usePeriodicity = false);
 };
