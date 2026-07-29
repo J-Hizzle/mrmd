@@ -1,4 +1,5 @@
 # Copyright 2024 Sebastian Eibl
+# Copyright 2026 Julian Friedrich Hille
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +15,9 @@
 
 mrmd_add_test(NAME test.analysis.AxialDensityProfile
         FILES AxialDensityProfile.test.cpp)
+
+mrmd_add_test(NAME test.analysis.AxialTemperatureProfile
+        FILES AxialTemperatureProfile.test.cpp)
 
 mrmd_add_test(NAME test.analysis.CountingPlane
         FILES CountingPlane.test.cpp)
