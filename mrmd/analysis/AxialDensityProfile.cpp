@@ -56,51 +56,44 @@ AxialDensityProfile::AxialDensityProfile(const real_t min,
                                          const idx_t numBins,
                                          const real_t binVolume,
                                          const idx_t numTypes,
-                                         const AXIS axis,
-                                         const bool enforceSymmetry)
-    : cumulativeAverageParticleNumberProfile_(
-          "cumulative-average-particle-number-profile", min, max, numBins, numTypes),
-      averageDensityProfile_("average-density-profile", cumulativeAverageParticleNumberProfile_),
+                                         const AXIS axis)
+    : averageDensityProfile_("cumulative-average-density-profile", min, max, numBins, numTypes),
       binVolume_(binVolume),
       numTypes_(numTypes),
-      axis_(axis),
-      enforceSymmetry_(enforceSymmetry)
+      axis_(axis)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
     MRMD_HOST_CHECK_GREATER(numTypes, 0);
 }
 
-void AxialDensityProfile::updateAverageDensityProfile()
+void AxialDensityProfile::reset()
 {
-    MRMD_HOST_CHECK_GREATER(particleNumberProfileSamples_, 0);
+    MRMD_HOST_CHECK_GREATER(
+        numberOfDensityProfileSamples_,
+        0,
+        "Cannot reset AxialDensityProfile because no samples have been taken yet.");
 
-    auto normalizationFactor = 1_r / binVolume_;
-    Kokkos::deep_copy(averageDensityProfile_.data, cumulativeAverageParticleNumberProfile_.data);
-    averageDensityProfile_.scale(normalizationFactor);
-
-    if (enforceSymmetry_)
-    {
-        averageDensityProfile_.makeSymmetric();
-    }
-
-    Kokkos::deep_copy(cumulativeAverageParticleNumberProfile_.data, 0_r);
-    particleNumberProfileSamples_ = 0;
+    Kokkos::deep_copy(averageDensityProfile_.data, 0_r);
+    numberOfDensityProfileSamples_ = 0;
 }
 
-void AxialDensityProfile::sampleParticleNumberProfile(const data::Atoms& atoms)
+void AxialDensityProfile::sample(const data::Atoms& atoms)
 {
-    cumulativeMovingAverage(
-        cumulativeAverageParticleNumberProfile_,
-        getAxialParticleNumberProfile(atoms.numLocalAtoms,
-                                      atoms.getPos(),
-                                      atoms.getType(),
-                                      numTypes_,
-                                      cumulativeAverageParticleNumberProfile_.min,
-                                      cumulativeAverageParticleNumberProfile_.max,
-                                      cumulativeAverageParticleNumberProfile_.numBins,
-                                      axis_),
-        real_c(particleNumberProfileSamples_));
-    particleNumberProfileSamples_++;
+    auto instantaneousDensityProfile = getAxialParticleNumberProfile(atoms.numLocalAtoms,
+                                                                     atoms.getPos(),
+                                                                     atoms.getType(),
+                                                                     numTypes_,
+                                                                     averageDensityProfile_.min,
+                                                                     averageDensityProfile_.max,
+                                                                     averageDensityProfile_.numBins,
+                                                                     axis_);
+
+    instantaneousDensityProfile.scale(1_r / binVolume_);
+
+    cumulativeMovingAverage(averageDensityProfile_,
+                            instantaneousDensityProfile,
+                            real_c(numberOfDensityProfileSamples_));
+    numberOfDensityProfileSamples_++;
 }
 
 }  // namespace analysis

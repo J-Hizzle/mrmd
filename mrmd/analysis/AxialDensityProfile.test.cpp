@@ -81,8 +81,7 @@ TEST(AxialDensityProfile, sample)
     auto atoms = initAtoms();
     AxialDensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X);
 
-    densityProfile.sampleParticleNumberProfile(atoms);
-    densityProfile.updateAverageDensityProfile();
+    densityProfile.sample(atoms);
 
     auto averageDensityProfile = densityProfile.getAverageDensityProfile();
     auto h_data =
@@ -95,26 +94,5 @@ TEST(AxialDensityProfile, sample)
         EXPECT_FLOAT_EQ(h_data(i, 2), real_c(11 - (i + 1)));
     }
 }
-
-TEST(AxialDensityProfile, sampleSymmetric)
-{
-    auto atoms = initAtoms();
-    AxialDensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X, true);
-
-    densityProfile.sampleParticleNumberProfile(atoms);
-    densityProfile.updateAverageDensityProfile();
-
-    auto averageDensityProfile = densityProfile.getAverageDensityProfile();
-    auto h_data =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), averageDensityProfile.data);
-
-    for (auto i = 0; i < 10; ++i)
-    {
-        EXPECT_FLOAT_EQ(h_data(i, 0), real_c(1));
-        EXPECT_FLOAT_EQ(h_data(i, 1), 5.5_r);
-        EXPECT_FLOAT_EQ(h_data(i, 2), 5.5_r);
-    }
-}
-
 }  // namespace analysis
 }  // namespace mrmd

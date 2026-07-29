@@ -41,19 +41,14 @@ data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
 class AxialDensityProfile
 {
 private:
-    data::MultiHistogram cumulativeAverageParticleNumberProfile_;
-    idx_t particleNumberProfileSamples_ = 0;
     data::MultiHistogram averageDensityProfile_;
+    idx_t numberOfDensityProfileSamples_ = 0;
     real_t binVolume_;
     idx_t numTypes_;
     AXIS axis_;
 
-    const bool enforceSymmetry_;
-
 public:
-    void sampleParticleNumberProfile(const data::Atoms& atoms);
-
-    void updateAverageDensityProfile();
+    void sample(const data::Atoms& atoms);
 
     inline auto getAverageDensityProfile() const { return averageDensityProfile_; }
     inline auto getAverageDensityProfile(const idx_t& typeId) const
@@ -63,13 +58,14 @@ public:
         return Kokkos::subview(averageDensityProfile_.data, Kokkos::ALL(), typeId);
     }
 
+    void reset();
+
     AxialDensityProfile(const real_t min,
                         const real_t max,
                         const idx_t numBins,
                         const real_t binVolume,
                         const idx_t numTypes,
-                        const AXIS axis,
-                        const bool enforceSymmetry = false);
+                        const AXIS axis);
 };
 }  // namespace analysis
 }  // namespace mrmd

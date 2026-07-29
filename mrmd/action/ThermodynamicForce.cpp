@@ -26,6 +26,7 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
                                        const data::Subdomain& subdomain,
                                        const real_t& requestedBinWidth,
                                        const std::vector<real_t>& thermodynamicForceModulation,
+                                       const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
@@ -35,6 +36,7 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
       targetDensity_(targetDensity),
       thermodynamicForceModulation_(thermodynamicForceModulation),
       forceFactor_("force-factor", targetDensity.size()),
+      enforceSymmetry_(enforceSymmetry),
       usePeriodicity_(usePeriodicity)
 {
     MRMD_HOST_CHECK_LESSEQUAL(
@@ -56,11 +58,13 @@ ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
                                        const data::Subdomain& subdomain,
                                        const real_t& requestedBinWidth,
                                        const real_t thermodynamicForceModulation,
+                                       const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : ThermodynamicForce(std::vector<real_t>{targetDensity},
                          subdomain,
                          requestedBinWidth,
                          {thermodynamicForceModulation},
+                         enforceSymmetry,
                          usePeriodicity)
 {
 }

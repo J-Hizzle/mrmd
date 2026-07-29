@@ -17,7 +17,6 @@
 
 #include <concepts>
 
-#include "analysis/AxialDensityProfile.hpp"
 #include "assert/assert.hpp"
 #include "data/Atoms.hpp"
 #include "data/MultiHistogram.hpp"
@@ -39,6 +38,7 @@ private:
     idx_t numTypes_;
 
     ScalarView forceFactor_;  ///< precalculated prefactor for force calculation
+    bool enforceSymmetry_ = false;
     bool usePeriodicity_ = false;
 
 public:
@@ -75,12 +75,14 @@ public:
                        const data::Subdomain& subdomain,
                        const real_t& requestedBinWidth,
                        const std::vector<real_t>& thermodynamicForceModulation,
+                       const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 
     ThermodynamicForce(const real_t targetDensity,
                        const data::Subdomain& subdomain,
                        const real_t& requestedBinWidth,
                        const real_t thermodynamicForceModulation,
+                       const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 };
 
@@ -111,19 +113,27 @@ void ThermodynamicForce::apply_if(const data::Atoms& atoms, const Pred& pred) co
 }
 
 template <OneCoordinatePredicate Pred>
-void ThermodynamicForce::update_if(const data::MultiHistogram& densityProfile,
+void ThermodynamicForce::update_if(const data::MultiHistogram& densityProfileArg,
                                    const real_t& smoothingSigma,
                                    const real_t& smoothingIntensity,
                                    const Pred& pred)
 {
     MRMD_HOST_CHECK_EQUAL(force_.numBins,
-                          densityProfile.numBins,
+                          densityProfileArg.numBins,
                           "force and density profile must have the same number of bins");
     MRMD_HOST_CHECK_EQUAL(force_.numHistograms,
-                          densityProfile.numHistograms,
+                          densityProfileArg.numHistograms,
                           "force and density profile must have the same number of histograms");
-    MRMD_HOST_CHECK(isFloatEqual(force_.binSize, densityProfile.binSize),
+    MRMD_HOST_CHECK(isFloatEqual(force_.binSize, densityProfileArg.binSize),
                     "bin sizes of force and density profile must match");
+
+    data::MultiHistogram densityProfile("densityProfile", densityProfileArg);
+
+    if (enforceSymmetry_)
+    {
+        densityProfile.makeSymmetric();
+    }
+
     auto smoothedDensityProfile =
         data::smoothen(densityProfile, smoothingSigma, smoothingIntensity, usePeriodicity_);
     auto smoothedDensityGradient = data::gradient(smoothedDensityProfile, usePeriodicity_);
