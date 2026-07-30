@@ -124,8 +124,9 @@ void ThermodynamicForce::update_if(const data::MultiHistogram& densityProfileArg
     MRMD_HOST_CHECK_EQUAL(force_.numHistograms,
                           densityProfileArg.numHistograms,
                           "force and density profile must have the same number of histograms");
-    MRMD_HOST_CHECK(isFloatEqual(force_.binSize, densityProfileArg.binSize),
-                    "bin sizes of force and density profile must match");
+    MRMD_HOST_CHECK_FLOAT_EQUAL(force_.binSize,
+                                densityProfileArg.binSize,
+                                "bin sizes of force and density profile must match");
 
     data::MultiHistogram densityProfile("densityProfile", densityProfileArg);
 
