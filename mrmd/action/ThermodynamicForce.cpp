@@ -41,7 +41,7 @@ ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
       enforceSymmetry_(enforceSymmetry),
       usePeriodicity_(usePeriodicity)
 {
-    MRMD_HOST_CHECK_LESSEQUAL(
+    MRMD_HOST_CHECK_FLOAT_EQUAL(
         force_.binSize, requestedDensityBinWidth, "requested bin size is not achieved");
 
     MRMD_HOST_CHECK_EQUAL(targetDensity.size(), thermodynamicForceModulation.size());
