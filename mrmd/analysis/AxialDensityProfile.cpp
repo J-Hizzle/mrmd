@@ -51,18 +51,22 @@ data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
     return histogram;
 }
 
-AxialDensityProfile::AxialDensityProfile(const real_t min,
-                                         const real_t max,
-                                         const idx_t numBins,
-                                         const real_t binVolume,
+AxialDensityProfile::AxialDensityProfile(const data::Subdomain& subdomain,
+                                         const real_t binWidth,
                                          const idx_t numTypes,
-                                         const AXIS axis)
-    : averageDensityProfile_("cumulative-average-density-profile", min, max, numBins, numTypes),
-      binVolume_(binVolume),
+                                         const AXIS& axis)
+    : averageDensityProfile_("cumulative-average-density-profile",
+                             subdomain.minCorner[to_underlying(axis)],
+                             subdomain.maxCorner[to_underlying(axis)],
+                             idx_c(subdomain.diameter[to_underlying(axis)] / binWidth),
+                             numTypes),
+      binVolume_(binWidth * subdomain.getAreaNormalToAxis(axis)),
       numTypes_(numTypes),
       axis_(axis)
 {
-    MRMD_HOST_CHECK_GREATEREQUAL(max, min);
+    MRMD_HOST_CHECK_FLOAT_EQUAL(
+        averageDensityProfile_.binSize, binWidth, "requested bin size is not achieved");
+
     MRMD_HOST_CHECK_GREATER(numTypes, 0);
 }
 

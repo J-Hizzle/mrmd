@@ -79,7 +79,8 @@ TEST(AxialDensityProfile, histogram)
 TEST(AxialDensityProfile, sample)
 {
     auto atoms = initAtoms();
-    AxialDensityProfile densityProfile(0_r, 10_r, 10, 1_r, 3, AXIS::X);
+    data::Subdomain subdomain{{0_r, 0_r, 0_r}, {10_r, 10_r, 10_r}, {0_r, 0_r, 0_r}};
+    AxialDensityProfile densityProfile(subdomain, 1_r, 3, AXIS::X);
 
     densityProfile.sample(atoms);
 

@@ -17,8 +17,10 @@
 
 #include <vector>
 
+#include "assert/assert.hpp"
 #include "data/Atoms.hpp"
 #include "data/MultiHistogram.hpp"
+#include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 
 namespace mrmd
@@ -60,12 +62,10 @@ public:
 
     void reset();
 
-    AxialDensityProfile(const real_t min,
-                        const real_t max,
-                        const idx_t numBins,
-                        const real_t binVolume,
+    AxialDensityProfile(const data::Subdomain& subdomain,
+                        const real_t binWidth,
                         const idx_t numTypes,
-                        const AXIS axis);
+                        const AXIS& axis);
 };
 }  // namespace analysis
 }  // namespace mrmd
