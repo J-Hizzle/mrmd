@@ -26,6 +26,7 @@ action::ThermodynamicForce restoreThermoForce(
     const data::Subdomain& subdomain,
     const std::vector<real_t>& targetDensities = {1_r},
     const std::vector<real_t>& thermodynamicForceModulations = {1_r},
+    const bool enforceSymmetry = false,
     const bool usePeriodicity = false,
     const idx_t maxNumForces = 10);
 }  // namespace io
