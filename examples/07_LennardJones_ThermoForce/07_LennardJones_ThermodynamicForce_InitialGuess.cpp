@@ -29,6 +29,7 @@
 #include "action/LimitVelocity.hpp"
 #include "action/ThermodynamicForce.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
+#include "analysis/AxialDensityProfile.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -174,8 +175,7 @@ void thermodynamicForce_initialGuess(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJonesInner(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap);
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -196,6 +196,9 @@ void thermodynamicForce_initialGuess(Config& config)
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
                                                                 config.temperature);
+
+    // set up density profile measurement
+    analysis::AxialDensityProfile densityProfile(subdomain, config.densityBinWidth, 1, AXIS::X);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -219,7 +222,7 @@ void thermodynamicForce_initialGuess(Config& config)
         util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
         dumpDens.open(config.fileOutDens);
         dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
-            Kokkos::HostSpace(), data::createGrid(thermodynamicForce.getDensityProfile())));
+            Kokkos::HostSpace(), data::createGrid(densityProfile.getAverageDensityProfile())));
         // thermodynamic force
         dumpThermoForce.open(config.fileOutTF);
         dumpThermoForce.dumpScalarView(Kokkos::create_mirror_view_and_copy(
@@ -269,31 +272,27 @@ void thermodynamicForce_initialGuess(Config& config)
 
         if (step % config.densitySamplingInterval == 0)
         {
-            thermodynamicForce.sample(atoms);
+            densityProfile.sample(atoms);
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // density profile output
-            auto numberOfDensityProfileSamples =
-                thermodynamicForce.getNumberOfDensityProfileSamples();
-
-            real_t normalizationFactor = 1_r / densityBinVolume;
-            if (numberOfDensityProfileSamples > 0)
-            {
-                normalizationFactor =
-                    1_r / (densityBinVolume * real_c(numberOfDensityProfileSamples));
-            }
-            auto densityProfile = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), thermodynamicForce.getDensityProfile(0));
-            dumpDens.dumpScalarView(densityProfile, normalizationFactor);
+            auto densityProfileView = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), densityProfile.getAverageDensityProfile(0));
+            dumpDens.dumpScalarView(densityProfileView);
         }
 
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
             // update thermodynamic force in the update region based on the sampled density profile
-            thermodynamicForce.update_if(
-                config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
+            thermodynamicForce.update_if(densityProfile.getAverageDensityProfile(),
+                                         config.smoothingInverseDamping,
+                                         config.smoothingRange,
+                                         isInThermoForceRegion);
+
+            // reset density profile after update
+            densityProfile.reset();
         }
 
         // reset forces to zero
@@ -304,7 +303,7 @@ void thermodynamicForce_initialGuess(Config& config)
         thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
         // compute forces and potential energy for atoms in the interaction region
-        lennardJonesInner.apply_if(
+        lennardJones.apply_if(
             atoms,
             verletList,
             KOKKOS_LAMBDA(const real_t x1,
@@ -326,7 +325,7 @@ void thermodynamicForce_initialGuess(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJonesInner.getEnergy()) / real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJones.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -436,8 +435,8 @@ int main(int argc, char* argv[])
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--rcap", config.r_cap, "capping radius for inner Lennard-Jones potential");
 
-    app.add_option("--innermin", config.intRegionMin, "interacting region minimum coordinate");
-    app.add_option("--innermax", config.intRegionMax, "interacting region maximum coordinate");
+    app.add_option("--intmin", config.intRegionMin, "interacting region minimum coordinate");
+    app.add_option("--intmax", config.intRegionMax, "interacting region maximum coordinate");
     app.add_option("--thermoforcemin",
                    config.thermoForceRegionMin,
                    "thermodynamic force region minimum coordinate");
