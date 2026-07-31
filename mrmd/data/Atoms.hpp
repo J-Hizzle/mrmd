@@ -65,7 +65,7 @@ public:
     KOKKOS_FORCEINLINE_FUNCTION vel_t getVel() const { return vel; }
     KOKKOS_FORCEINLINE_FUNCTION force_t getForce() const { return force; }
     KOKKOS_FORCEINLINE_FUNCTION type_t getType() const { return type; }
-    KOKKOS_FORCEINLINE_FUNCTION charge_t getMass() const { return mass; }
+    KOKKOS_FORCEINLINE_FUNCTION mass_t getMass() const { return mass; }
     KOKKOS_FORCEINLINE_FUNCTION charge_t getCharge() const { return charge; }
     KOKKOS_FORCEINLINE_FUNCTION relative_mass_t getRelativeMass() const { return relativeMass; }
 
