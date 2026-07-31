@@ -134,6 +134,22 @@ public:
     template <class DEVICE_TYPE_SRC, bool DEVICE_SRC>
     explicit GeneralAtoms(const GeneralAtoms<DEVICE_TYPE_SRC, DEVICE_SRC>& atoms);
 
+    idx_t getNumTypes() const
+    {
+        // assume contiguous types
+        idx_t maxType = 0;
+        idx_t minType = 0;
+        auto policy = Kokkos::RangePolicy<>(0, numLocalAtoms);
+        auto kernel = KOKKOS_LAMBDA(const idx_t idx, idx_t& localMaxType, idx_t& localMinType)
+        {
+            if (type(idx) > localMaxType) localMaxType = type(idx);
+            if (type(idx) < localMinType) localMinType = type(idx);
+        };
+        Kokkos::parallel_reduce(policy, kernel, maxType, minType);
+        Kokkos::fence();
+        return maxType - minType + 1;  // types are zero-indexed
+    }
+
 private:
     AtomsT atoms_;
 
