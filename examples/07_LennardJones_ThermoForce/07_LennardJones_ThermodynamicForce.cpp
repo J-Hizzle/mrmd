@@ -181,7 +181,13 @@ void thermodynamicForce(Config& config)
                                                                 config.temperature);
 
     // set up density profile measurement
-    analysis::AxialAverageProfile densityProfile(subdomain, config.densityBinWidth, 1, AXIS::X);
+    analysis::AxialAverageProfile densityProfile(
+        subdomain,
+        config.densityBinWidth,
+        config.densityBinWidth * subdomain.getAreaNormalToAxis(AXIS::X),
+        atoms.getNumTypes(),
+        analysis::getAxialParticleNumberProfile,
+        AXIS::X);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rho},
@@ -263,7 +269,7 @@ void thermodynamicForce(Config& config)
 
         if (step % config.densitySamplingInterval == 0)
         {
-            densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
+            densityProfile.sample(atoms);
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))

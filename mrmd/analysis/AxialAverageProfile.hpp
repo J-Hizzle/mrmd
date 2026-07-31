@@ -30,39 +30,30 @@ namespace mrmd
 {
 namespace analysis
 {
-template <typename F>
-concept ProfileSampler =
-    std::invocable<F, const data::Atoms&, const real_t, const real_t, const idx_t, const AXIS> &&
-    std::same_as<std::invoke_result_t<F,
-                                      const data::Atoms&,
-                                      const real_t,
-                                      const real_t,
-                                      const idx_t,
-                                      const AXIS>,
-                 data::MultiHistogram>;
-
 class AxialAverageProfile
 {
 private:
+    using Sampler = std::function<data::MultiHistogram(
+        const data::Atoms&, const real_t, const real_t, const idx_t, const AXIS)>;
+
     data::MultiHistogram averageProfile_;
     idx_t numberOfSamples_ = 0;
-    real_t binVolume_;
+    real_t normalizationFactor_;
     idx_t numTypes_;
     AXIS axis_;
+    Sampler sampler_;
 
 public:
-    template <typename Sampler>
-        requires ProfileSampler<Sampler&&>
-    void sample(const data::Atoms& atoms, Sampler&& sampler)
+    void sample(const data::Atoms& atoms)
     {
-        auto instantaneousProfile = std::invoke(std::forward<Sampler>(sampler),
+        auto instantaneousProfile = std::invoke(sampler_,
                                                 atoms,
                                                 averageProfile_.min,
                                                 averageProfile_.max,
                                                 averageProfile_.numBins,
                                                 axis_);
 
-        instantaneousProfile.scale(1_r / binVolume_);
+        instantaneousProfile.scale(1_r / normalizationFactor_);
 
         cumulativeMovingAverage(averageProfile_, instantaneousProfile, real_c(numberOfSamples_));
         numberOfSamples_++;
@@ -80,7 +71,9 @@ public:
 
     AxialAverageProfile(const data::Subdomain& subdomain,
                         const real_t binWidth,
+                        const real_t normalizationFactor,
                         const idx_t numTypes,
+                        const Sampler sampler,
                         const AXIS& axis);
 };
 }  // namespace analysis

@@ -199,7 +199,13 @@ void thermodynamicForce_initialGuess(Config& config)
                                                                 config.temperature);
 
     // set up density profile measurement
-    analysis::AxialAverageProfile densityProfile(subdomain, config.densityBinWidth, 1, AXIS::X);
+    analysis::AxialAverageProfile densityProfile(
+        subdomain,
+        config.densityBinWidth,
+        config.densityBinWidth * subdomain.getAreaNormalToAxis(AXIS::X),
+        atoms.getNumTypes(),
+        analysis::getAxialParticleNumberProfile,
+        AXIS::X);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -273,7 +279,7 @@ void thermodynamicForce_initialGuess(Config& config)
 
         if (step % config.densitySamplingInterval == 0)
         {
-            densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
+            densityProfile.sample(atoms);
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))
