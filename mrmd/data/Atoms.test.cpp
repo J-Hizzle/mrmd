@@ -21,14 +21,14 @@ namespace mrmd
 {
 namespace data
 {
-TEST(Atoms, getNumTypes)
+TEST(ATOMS, getNumTypes)
 {
     Atoms atoms(100);
     atoms.numLocalAtoms = 100;
 
     auto type = atoms.getType();
     auto policy = Kokkos::RangePolicy<>(0, atoms.size());
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx, idx_t& maxType, idx_t& minType)
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
     {
         type(idx) = idx % 10 - 1;  // types from -1 to 8
     };
