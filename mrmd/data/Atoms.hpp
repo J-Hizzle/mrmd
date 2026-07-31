@@ -136,18 +136,16 @@ public:
 
     idx_t getNumTypes() const
     {
-        // assume contiguous types
+        // assume contiguous types starting from 0
         idx_t maxType = 0;
-        idx_t minType = 0;
         auto policy = Kokkos::RangePolicy<>(0, numLocalAtoms);
-        auto kernel = KOKKOS_LAMBDA(const idx_t idx, idx_t& localMaxType, idx_t& localMinType)
+        auto kernel = KOKKOS_LAMBDA(const idx_t idx, idx_t& localMaxType)
         {
             if (type(idx) > localMaxType) localMaxType = type(idx);
-            if (type(idx) < localMinType) localMinType = type(idx);
         };
-        Kokkos::parallel_reduce(policy, kernel, maxType, minType);
+        Kokkos::parallel_reduce(policy, kernel, maxType);
         Kokkos::fence();
-        return maxType - minType + 1;  // types are zero-indexed
+        return maxType + 1;  // types are zero-indexed
     }
 
 private:

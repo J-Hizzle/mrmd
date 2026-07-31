@@ -34,7 +34,7 @@ TEST(ATOMS, getNumTypes)
     };
     Kokkos::parallel_for("getNumTypes", policy, kernel);
     Kokkos::fence();
-    EXPECT_EQ(atoms.getNumTypes(), 10);
+    EXPECT_EQ(atoms.getNumTypes(), 9);  // types are zero-indexed, so 9 types in total
 }
 }  // namespace data
 }  // namespace mrmd
