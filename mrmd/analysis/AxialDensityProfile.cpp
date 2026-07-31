@@ -19,19 +19,21 @@ namespace mrmd
 {
 namespace analysis
 {
-data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
-                                                   const data::Atoms::pos_t& positions,
-                                                   const data::Atoms::type_t& types,
-                                                   const int64_t numTypes,
+data::MultiHistogram getAxialParticleNumberProfile(const data::Atoms& atoms,
                                                    const real_t min,
                                                    const real_t max,
-                                                   const int64_t numBins,
+                                                   const idx_t numBins,
                                                    const AXIS axis)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
-    MRMD_HOST_CHECK_GREATER(numTypes, 0);
 
-    data::MultiHistogram histogram("density-profile", min, max, numBins, numTypes);
+    auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
+    auto numTypes = atoms.getNumTypes();
+    auto positions = atoms.getPos();
+    auto types = atoms.getType();
+
+    data::MultiHistogram histogram(
+        "get-axial-particle-number-profile", min, max, numBins, numTypes);
     MultiScatterView scatter(histogram.data);
 
     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
@@ -50,55 +52,5 @@ data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
 
     return histogram;
 }
-
-AxialDensityProfile::AxialDensityProfile(const data::Subdomain& subdomain,
-                                         const real_t binWidth,
-                                         const idx_t numTypes,
-                                         const AXIS& axis)
-    : averageDensityProfile_("cumulative-average-density-profile",
-                             subdomain.minCorner[to_underlying(axis)],
-                             subdomain.maxCorner[to_underlying(axis)],
-                             idx_c(subdomain.diameter[to_underlying(axis)] / binWidth),
-                             numTypes),
-      binVolume_(binWidth * subdomain.getAreaNormalToAxis(axis)),
-      numTypes_(numTypes),
-      axis_(axis)
-{
-    MRMD_HOST_CHECK_FLOAT_EQUAL(
-        averageDensityProfile_.binSize, binWidth, "requested bin size is not achieved");
-
-    MRMD_HOST_CHECK_GREATER(numTypes, 0);
-}
-
-void AxialDensityProfile::reset()
-{
-    MRMD_HOST_CHECK_GREATER(
-        numberOfDensityProfileSamples_,
-        0,
-        "Cannot reset AxialDensityProfile because no samples have been taken yet.");
-
-    Kokkos::deep_copy(averageDensityProfile_.data, 0_r);
-    numberOfDensityProfileSamples_ = 0;
-}
-
-void AxialDensityProfile::sample(const data::Atoms& atoms)
-{
-    auto instantaneousDensityProfile = getAxialParticleNumberProfile(atoms.numLocalAtoms,
-                                                                     atoms.getPos(),
-                                                                     atoms.getType(),
-                                                                     numTypes_,
-                                                                     averageDensityProfile_.min,
-                                                                     averageDensityProfile_.max,
-                                                                     averageDensityProfile_.numBins,
-                                                                     axis_);
-
-    instantaneousDensityProfile.scale(1_r / binVolume_);
-
-    cumulativeMovingAverage(averageDensityProfile_,
-                            instantaneousDensityProfile,
-                            real_c(numberOfDensityProfileSamples_));
-    numberOfDensityProfileSamples_++;
-}
-
 }  // namespace analysis
 }  // namespace mrmd

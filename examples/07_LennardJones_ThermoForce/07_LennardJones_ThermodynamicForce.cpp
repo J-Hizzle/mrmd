@@ -29,6 +29,7 @@
 #include "action/LimitVelocity.hpp"
 #include "action/ThermodynamicForce.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
+#include "analysis/AxialAverageProfile.hpp"
 #include "analysis/AxialDensityProfile.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
@@ -180,7 +181,7 @@ void thermodynamicForce(Config& config)
                                                                 config.temperature);
 
     // set up density profile measurement
-    analysis::AxialDensityProfile densityProfile(subdomain, config.densityBinWidth, 1, AXIS::X);
+    analysis::AxialAverageProfile densityProfile(subdomain, config.densityBinWidth, 1, AXIS::X);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rho},
@@ -262,7 +263,7 @@ void thermodynamicForce(Config& config)
 
         if (step % config.densitySamplingInterval == 0)
         {
-            densityProfile.sample(atoms);
+            densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))

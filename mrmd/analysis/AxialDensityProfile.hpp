@@ -31,41 +31,10 @@ namespace analysis
  * Calculate a discretized particle number profile along an axis.
  * Out-of-bounds values are discarded.
  */
-data::MultiHistogram getAxialParticleNumberProfile(const idx_t numAtoms,
-                                                   const data::Atoms::pos_t& positions,
-                                                   const data::Atoms::type_t& types,
-                                                   const int64_t numTypes,
+data::MultiHistogram getAxialParticleNumberProfile(const data::Atoms& atoms,
                                                    const real_t min,
                                                    const real_t max,
-                                                   const int64_t numBins,
+                                                   const idx_t numBins,
                                                    const AXIS axis);
-
-class AxialDensityProfile
-{
-private:
-    data::MultiHistogram averageDensityProfile_;
-    idx_t numberOfDensityProfileSamples_ = 0;
-    real_t binVolume_;
-    idx_t numTypes_;
-    AXIS axis_;
-
-public:
-    void sample(const data::Atoms& atoms);
-
-    inline auto getAverageDensityProfile() const { return averageDensityProfile_; }
-    inline auto getAverageDensityProfile(const idx_t& typeId) const
-    {
-        assert(typeId < numTypes_);
-        assert(typeId >= 0);
-        return Kokkos::subview(averageDensityProfile_.data, Kokkos::ALL(), typeId);
-    }
-
-    void reset();
-
-    AxialDensityProfile(const data::Subdomain& subdomain,
-                        const real_t binWidth,
-                        const idx_t numTypes,
-                        const AXIS& axis);
-};
 }  // namespace analysis
 }  // namespace mrmd
