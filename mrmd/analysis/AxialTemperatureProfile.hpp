@@ -25,16 +25,10 @@ namespace mrmd
 {
 namespace analysis
 {
-data::MultiHistogram getAxialTotalSquaredVelocityProfile(const idx_t numAtoms,
-                                                         const data::Atoms::pos_t& positions,
-                                                         const data::Atoms::vel_t& velocities,
-                                                         const data::Atoms::mass_t& masses,
-                                                         const data::Atoms::type_t& types,
-                                                         const int64_t numTypes,
-                                                         const real_t min,
-                                                         const real_t max,
-                                                         const int64_t numBins,
-                                                         const AXIS axis);
-
+data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
+                                                   const real_t min,
+                                                   const real_t max,
+                                                   const idx_t numBins,
+                                                   const AXIS axis);
 }  // namespace analysis
 }  // namespace mrmd

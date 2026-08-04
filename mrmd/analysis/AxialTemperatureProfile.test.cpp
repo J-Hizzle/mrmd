@@ -73,16 +73,8 @@ TEST(AxialTemperatureProfile, histogram)
 {
     auto atoms = initAtoms();
 
-    auto histogram = getAxialTotalSquaredVelocityProfile(atoms.numLocalAtoms,
-                                                         atoms.getPos(),
-                                                         atoms.getVel(),
-                                                         atoms.getMass(),
-                                                         atoms.getType(),
-                                                         3,
-                                                         0_r,
-                                                         10_r,
-                                                         10,
-                                                         AXIS::X);
+    auto histogram = getAxialKineticEnergyProfile(atoms, 0_r, 10_r, 10, AXIS::X);
+
     auto h_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram.data);
 
     for (auto i = 0; i < 10; ++i)
