@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(00_IdealGas_NVE)
-add_subdirectory(01_IdealGas_NVT)
-add_subdirectory(02_LennardJones_NVT)
-add_subdirectory(03_LennardJones_NVE)
-add_subdirectory(04_LennardJones_IdealGas_LocalCap)
-add_subdirectory(05_LennardJones_Equilibration)
-add_subdirectory(06_LennardJones_ProductionAtomistic)
-add_subdirectory(07_LennardJones_ThermoForce)
-add_subdirectory(08_LennardJones_ProductionTracer)
+add_executable(01_IdealGas_NVT
+        01_IdealGas_NVT.cpp
+        )
+target_link_libraries(01_IdealGas_NVT
+        PRIVATE mrmd CLI11::CLI11
+        )
+
+add_test(NAME Example.01_IdealGas_NVT COMMAND ./01_IdealGas_NVT --nsteps 10)
