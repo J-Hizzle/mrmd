@@ -15,10 +15,10 @@
 
 configure_file(lennardJonesNVT_final.gro . COPYONLY)
 
-add_executable(02_LennardJones_NVE
-        02_LennardJones_NVE.cpp
+add_executable(03_LennardJones_NVE
+        03_LennardJones_NVE.cpp
         )
-target_link_libraries(02_LennardJones_NVE
+target_link_libraries(03_LennardJones_NVE
         PRIVATE mrmd CLI11::CLI11
         )
-add_test(NAME Example.02_LennardJones_NVE COMMAND ./02_LennardJones_NVE --nsteps 10)
+add_test(NAME Example.03_LennardJones_NVE COMMAND ./03_LennardJones_NVE --nsteps 10)

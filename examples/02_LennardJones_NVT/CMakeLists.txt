@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(01_LennardJones_NVT
-        01_LennardJones_NVT.cpp
+add_executable(02_LennardJones_NVT
+        02_LennardJones_NVT.cpp
         )
-target_link_libraries(01_LennardJones_NVT
+target_link_libraries(02_LennardJones_NVT
         PRIVATE mrmd CLI11::CLI11
         )
-add_test(NAME Example.01_LennardJones_NVT COMMAND ./01_LennardJones_NVT --nsteps 10)
+add_test(NAME Example.02_LennardJones_NVT COMMAND ./02_LennardJones_NVT --nsteps 10)
