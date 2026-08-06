@@ -29,7 +29,7 @@ namespace mrmd
 namespace analysis
 {
 template <typename Sampler>
-concept AxialParticleNumberProfileSampler =
+concept AxialProfileSampler =
     std::invocable<Sampler, const data::Atoms&, real_t, real_t, idx_t, AXIS> &&
     std::same_as<std::invoke_result_t<Sampler, const data::Atoms&, real_t, real_t, idx_t, AXIS>,
                  data::MultiHistogram>;
@@ -44,7 +44,7 @@ private:
     AXIS axis_;
 
 public:
-    template <AxialParticleNumberProfileSampler Sampler>
+    template <AxialProfileSampler Sampler>
     void sample(const data::Atoms& atoms, const Sampler& sampler)
     {
         auto instantaneousProfile = sampler(
