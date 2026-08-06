@@ -16,9 +16,7 @@
 #pragma once
 
 #include <concepts>
-#include <functional>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 #include "data/Atoms.hpp"
@@ -30,28 +28,27 @@ namespace mrmd
 {
 namespace analysis
 {
+template <typename Sampler>
+concept AxialProfileSampler =
+    std::invocable<Sampler, const data::Atoms&, real_t, real_t, idx_t, AXIS> &&
+    std::same_as<std::invoke_result_t<Sampler, const data::Atoms&, real_t, real_t, idx_t, AXIS>,
+                 data::MultiHistogram>;
+
 class AxialAverageProfile
 {
 private:
-    using Sampler = std::function<data::MultiHistogram(
-        const data::Atoms&, const real_t, const real_t, const idx_t, const AXIS)>;
-
     data::MultiHistogram averageProfile_;
     idx_t numberOfSamples_ = 0;
     real_t normalizationFactor_;
     idx_t numTypes_;
     AXIS axis_;
-    Sampler sampler_;
 
 public:
-    void sample(const data::Atoms& atoms)
+    template <AxialProfileSampler Sampler>
+    void sample(const data::Atoms& atoms, const Sampler& sampler)
     {
-        auto instantaneousProfile = std::invoke(sampler_,
-                                                atoms,
-                                                averageProfile_.min,
-                                                averageProfile_.max,
-                                                averageProfile_.numBins,
-                                                axis_);
+        auto instantaneousProfile = sampler(
+            atoms, averageProfile_.min, averageProfile_.max, averageProfile_.numBins, axis_);
 
         instantaneousProfile.scale(1_r / normalizationFactor_);
 
@@ -73,7 +70,6 @@ public:
                         const real_t binWidth,
                         const real_t normalizationFactor,
                         const idx_t numTypes,
-                        const Sampler sampler,
                         const AXIS& axis);
 };
 }  // namespace analysis
