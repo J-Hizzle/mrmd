@@ -26,25 +26,30 @@ namespace mrmd
 {
 namespace action
 {
+struct DefaultWeightingFunction
+{
+    KOKKOS_INLINE_FUNCTION
+    real_t operator()(const real_t, const real_t, const real_t) const
+    {
+        return 1_r;
+    }
+};
+
+template <typename WeightingFunc = DefaultWeightingFunction>
 class VelocityVerletLangevinThermostat
 {
 private:
-    using WeightingFunction = std::function<real_t(
-        const real_t, const real_t, const real_t)>;  ///< function that returns a weight based on
-                                                     ///< the position of an atom
+    using WeightingFunction = WeightingFunc;  ///< functor that returns a weight based on the
+                                               ///< position of an atom
 
     const Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
     const real_t zeta_;
     const real_t temperature_;
-    const WeightingFunction weightingFunction_ =
-        KOKKOS_LAMBDA(const real_t, const real_t, const real_t)
-    {
-        return 1_r;
-    };
+    const WeightingFunction weightingFunction_;
 
 public:
     VelocityVerletLangevinThermostat(const real_t& zeta, const real_t& temperature)
-        : zeta_(zeta), temperature_(temperature)
+        : zeta_(zeta), temperature_(temperature), weightingFunction_(WeightingFunction{})
     {
     }
 
@@ -88,10 +93,12 @@ public:
     real_t preForceIntegrate_apply_if(data::Atoms& atoms, const real_t dt, const Pred& pred);
 };
 
+template <typename WeightingFunc>
 template <OnePositionPredicate Pred>
-real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms& atoms,
-                                                                    const real_t dt,
-                                                                    const Pred& pred)
+real_t VelocityVerletLangevinThermostat<WeightingFunc>::preForceIntegrate_apply_if(
+    data::Atoms& atoms,
+    const real_t dt,
+    const Pred& pred)
 {
     auto RNG = randPool_;
     auto dtHalf(0.5_r * dt);
@@ -102,6 +109,7 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
     auto mass = atoms.getMass();
     auto zeta = zeta_;
     auto temperature = temperature_;
+    auto weightingFunction = weightingFunction_;
 
     auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t& idx, real_t& maxDistSqr)
@@ -129,7 +137,7 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
             auto randGen = RNG.get_state();
 
             // Get the weight for the current atom based on its position
-            auto weight = weightingFunction_(pos(idx, 0), pos(idx, 1), pos(idx, 2));
+            auto weight = weightingFunction(pos(idx, 0), pos(idx, 1), pos(idx, 2));
 
             // Apply the Ornstein-Uhlenbeck process to the velocity
             action::updateOrnsteinUhlenbeck(vel(idx, 0),
