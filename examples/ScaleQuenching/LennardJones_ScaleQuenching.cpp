@@ -142,7 +142,7 @@ public:
         const real_t dx = std::abs(x - boxCenter_);
 
         if (dx < xMin_)
-            return std::numeric_limits<real_t>::epsilon();
+            return 0_r;
         else if (dx > xMax_)
             return 1_r;
         else
