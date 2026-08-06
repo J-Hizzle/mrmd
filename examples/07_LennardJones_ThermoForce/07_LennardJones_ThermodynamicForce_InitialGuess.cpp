@@ -204,7 +204,6 @@ void thermodynamicForce_initialGuess(Config& config)
         config.densityBinWidth,
         config.densityBinWidth * subdomain.getAreaNormalToAxis(AXIS::X),
         atoms.getNumTypes(),
-        analysis::getAxialParticleNumberProfile,
         AXIS::X);
 
     // set up timer for runtime measurement
@@ -279,7 +278,7 @@ void thermodynamicForce_initialGuess(Config& config)
 
         if (step % config.densitySamplingInterval == 0)
         {
-            densityProfile.sample(atoms);
+            densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))

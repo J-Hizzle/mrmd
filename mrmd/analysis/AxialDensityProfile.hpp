@@ -26,11 +26,10 @@
 namespace mrmd
 {
 namespace analysis
-{
-/**
- * Calculate a discretized particle number profile along an axis.
- * Out-of-bounds values are discarded.
- */
+{ /**
+   * Calculate a discretized particle number profile along an axis.
+   * Out-of-bounds values are discarded.
+   */
 data::MultiHistogram getAxialParticleNumberProfile(const data::Atoms& atoms,
                                                    const real_t min,
                                                    const real_t max,
