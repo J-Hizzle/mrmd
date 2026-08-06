@@ -27,3 +27,10 @@ add_executable(ScaleQuenching_EquilibrateLangevin
 target_link_libraries(ScaleQuenching_EquilibrateLangevin
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(LennardJones_ScaleQuenching
+        LennardJones_ScaleQuenching.cpp
+        )
+target_link_libraries(LennardJones_ScaleQuenching
+        PRIVATE mrmd CLI11::CLI11
+        )

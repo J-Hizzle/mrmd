@@ -94,8 +94,13 @@ struct Config
     const bool enforceSymmetry = true;  ///< whether to enforce symmetry in the thermodynamic force
 
     // application regions
-    real_t intRegionMin = 0_r;                   ///< minimum x-coordinate of the interaction region
-    real_t intRegionMax = 10_r * sigma + r_cut;  ///< maximum x-coordinate of the interaction region
+    real_t interactionRegionMin = 0_r * sigma;  ///< minimum x-coordinate of the interaction region
+    real_t interactionRegionMax =
+        12.5_r * sigma;                         ///< maximum x-coordinate of the interaction region
+    real_t thermostatRegionMin = 10_r * sigma;  ///< minimum x-coordinate of the interaction region
+    real_t thermostatRegionMax = 15_r * sigma;  ///< maximum x-coordinate of the interaction region
+    real_t thermostatInterpolationRegionMin = 10_r * sigma;
+    real_t thermostatInterpolationRegionMax = 12.5_r * sigma;
     real_t thermoForceRegionMin =
         10_r * sigma;  ///< minimum x-coordinate of the thermodynamic force region
     real_t thermoForceRegionMax =
@@ -114,6 +119,35 @@ struct Config
     std::string fileOutTF;
     std::string fileOutDens;
     std::string fileOutFinalTF;
+};
+
+class SymmetricWeightingFunction
+{
+private:
+    const real_t xMin_;
+    const real_t xMax_;
+    const real_t boxCenter_;
+    const real_t width_;
+
+public:
+    SymmetricWeightingFunction(const Vector3D center, const real_t xMin, const real_t xMax)
+        : xMin_(xMin), xMax_(xMax), boxCenter_(center[0]), width_(xMax - xMin)
+    {
+        MRMD_HOST_CHECK_GREATEREQUAL(xMax, xMin);
+    }
+
+    KOKKOS_INLINE_FUNCTION
+    real_t operator()(const real_t x, const real_t /*y*/, const real_t /*z*/) const
+    {
+        const real_t dx = std::abs(x - boxCenter_);
+
+        if (dx < xMin_)
+            return std::numeric_limits<real_t>::epsilon();
+        else if (dx > xMax_)
+            return 1_r;
+        else
+            return 1_r - std::pow(std::cos(pi * (x - xMin_) / (2_r * width_)), 2_r);
+    }
 };
 
 void thermodynamicForce(Config& config)
@@ -139,6 +173,7 @@ void thermodynamicForce(Config& config)
             initialSubdomain.maxCorner[2],
         },
         {0_r, initialSubdomain.ghostLayerThickness[1], initialSubdomain.ghostLayerThickness[1]});
+    // auto subdomain(initialSubdomain);
 
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
@@ -166,17 +201,32 @@ void thermodynamicForce(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different regions
-    util::IsInSymmetricSlab isInIntRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, config.intRegionMin, config.intRegionMax);
+    util::IsInSymmetricSlab isInInteractionRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                  config.interactionRegionMin,
+                                                  config.interactionRegionMax,
+                                                  AXIS::X);
     util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                   config.thermoForceRegionMin,
                                                   config.thermoForceRegionMax,
                                                   AXIS::X,
                                                   -std::numeric_limits<real_t>::epsilon());
+    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                                 config.thermostatRegionMin,
+                                                 config.thermostatRegionMax,
+                                                 AXIS::X);
+
+    // set up weighting function for Langevin thermostat
+    SymmetricWeightingFunction weightingFunction(boxCenter,
+                                                 config.thermostatInterpolationRegionMin,
+                                                 config.thermostatInterpolationRegionMax);
+    // auto weightingFunction = KOKKOS_LAMBDA(const real_t x, const real_t y, const real_t z)
+    // {return 1_r; };
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
-                                                                config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator(
+        config.friction, config.temperature, weightingFunction);
+    // action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
+    //                                                             config.temperature);
 
     // set up thermodynamic force for density control
     action::ThermodynamicForce thermodynamicForce({rho},
@@ -221,7 +271,8 @@ void thermodynamicForce(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion with Langevin thermostat
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement +=
+            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -292,7 +343,6 @@ void thermodynamicForce(Config& config)
         // apply thermodynamic force to atoms in the thermodynamic force region
         thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
-        // compute forces and potential energy for atoms in the interaction region
         lennardJones.apply_if(
             atoms,
             verletList,
@@ -302,7 +352,7 @@ void thermodynamicForce(Config& config)
                           const real_t x2,
                           const real_t y2,
                           const real_t z2) {
-                return (isInIntRegion(x1, y1, z1) && isInIntRegion(x2, y2, z2));
+                return (isInInteractionRegion(x1, y1, z1) && isInInteractionRegion(x2, y2, z2));
             });
 
         // contribute forces calculated on ghost atoms back to real atoms
@@ -367,8 +417,6 @@ void thermodynamicForce(Config& config)
 
         // close statistics file
         fStat.close();
-        auto time = timer.seconds();
-        std::cout << time << std::endl;
 
         io::dumpGRO(config.fileOutFinalGRO,
                     atoms,
@@ -423,8 +471,20 @@ int main(int argc, char* argv[])
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option("--rcap", config.r_cap, "capping radius for inner Lennard-Jones potential");
 
-    app.add_option("--intmin", config.intRegionMin, "interacting region minimum coordinate");
-    app.add_option("--intmax", config.intRegionMax, "interacting region maximum coordinate");
+    app.add_option(
+        "--intermin", config.interactionRegionMin, "interaction region minimum coordinate");
+    app.add_option(
+        "--intermax", config.interactionRegionMax, "interaction region maximum coordinate");
+    app.add_option("--thermostatinterpmin",
+                   config.thermostatInterpolationRegionMin,
+                   "thermostat interpolation region minimum coordinate");
+    app.add_option("--thermostatinterpmax",
+                   config.thermostatInterpolationRegionMax,
+                   "thermostat interpolation region maximum coordinate");
+    app.add_option(
+        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
+    app.add_option(
+        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
     app.add_option("--thermoforcemin",
                    config.thermoForceRegionMin,
                    "thermodynamic force region minimum coordinate");

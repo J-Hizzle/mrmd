@@ -49,11 +49,11 @@ struct Config
                                             ///< from
 
     // scale quenching parameters
-    real_t scaleFactor = 1_r; ///< factor by which the mass and the energy are scaled
+    real_t scaleFactor = 1_r;  ///< factor by which the mass and the energy are scaled
 
     // interaction parameters
     static constexpr real_t sigma =
-        1_r;  ///< distance at which LJ potential is zero in reduced units
+        1_r;               ///< distance at which LJ potential is zero in reduced units
     real_t epsilon = 1_r;  ///< energy well depth of LJ potential in reduced units
     real_t mass = 1_r;     ///< mass of one atom in reduced units
     static constexpr real_t maxVelocity =
@@ -235,7 +235,8 @@ int main(int argc, char* argv[])
     app.add_option("--friction", config.friction, "friction coefficient for thermostat");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
-    app.add_option("--scale", config.scaleFactor, "factor by which the mass and the energy are scaled");
+    app.add_option(
+        "--scale", config.scaleFactor, "factor by which the mass and the energy are scaled");
 
     CLI11_PARSE(app, argc, argv);
 

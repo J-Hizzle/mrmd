@@ -29,20 +29,30 @@ namespace action
 class VelocityVerletLangevinThermostat
 {
 private:
-    Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
-    real_t zeta_;
-    real_t temperature_;
+    using WeightingFunction = std::function<real_t(
+        const real_t, const real_t, const real_t)>;  ///< function that returns a weight based on
+                                                     ///< the position of an atom
+
+    const Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
+    const real_t zeta_;
+    const real_t temperature_;
+    const WeightingFunction weightingFunction_ =
+        KOKKOS_LAMBDA(const real_t, const real_t, const real_t)
+    {
+        return 1_r;
+    };
 
 public:
-    void set(const real_t& zeta, const real_t& temperature)
+    VelocityVerletLangevinThermostat(const real_t& zeta, const real_t& temperature)
+        : zeta_(zeta), temperature_(temperature)
     {
-        zeta_ = zeta;
-        temperature_ = temperature;
     }
 
-    VelocityVerletLangevinThermostat(const real_t& zeta, const real_t& temperature)
+    VelocityVerletLangevinThermostat(const real_t& zeta,
+                                     const real_t& temperature,
+                                     const WeightingFunction& weightingFunction)
+        : zeta_(zeta), temperature_(temperature), weightingFunction_(weightingFunction)
     {
-        set(zeta, temperature);
     }
 
     real_t preForceIntegrate(data::Atoms& atoms, const real_t dt)
@@ -53,7 +63,25 @@ public:
 
     void postForceIntegrate(data::Atoms& atoms, const real_t dt)
     {
-        action::VelocityVerlet::postForceIntegrate(atoms, dt);
+        auto dtHalf(0.5_r * dt);
+        auto vel = atoms.getVel();
+        auto force = atoms.getForce();
+        auto mass = atoms.getMass();
+
+        auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
+        auto kernel = KOKKOS_LAMBDA(const idx_t& idx)
+        {
+            action::updateKick(vel(idx, 0),
+                               vel(idx, 1),
+                               vel(idx, 2),
+                               force(idx, 0),
+                               force(idx, 1),
+                               force(idx, 2),
+                               dtHalf,
+                               mass(idx));
+        };
+        Kokkos::parallel_for("VelocityVerlet::postForceIntegrate", policy, kernel);
+        Kokkos::fence();
     }
 
     template <OnePositionPredicate Pred>
@@ -100,13 +128,16 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
             // Get a random number state from the pool for the active thread
             auto randGen = RNG.get_state();
 
+            // Get the weight for the current atom based on its position
+            auto weight = weightingFunction_(pos(idx, 0), pos(idx, 1), pos(idx, 2));
+
             // Apply the Ornstein-Uhlenbeck process to the velocity
             action::updateOrnsteinUhlenbeck(vel(idx, 0),
                                             vel(idx, 1),
                                             vel(idx, 2),
                                             dtFull,
                                             mass(idx),
-                                            zeta,
+                                            weight * zeta,
                                             temperature,
                                             randGen.normal(),
                                             randGen.normal(),
