@@ -78,5 +78,15 @@ TEST(IsInSlab, testInterval)
     EXPECT_FALSE(isInInterval(-2.1_r));
 }
 
+TEST(IsInSlab, testGetVolume)
+{
+    const auto slabMin = 2_r;
+    const auto slabMax = 4_r;
+    auto isInSlab = IsInSlab(slabMin, slabMax);
+
+    data::Subdomain subdomain({0_r, 0_r, 0_r}, {10_r, 10_r, 10_r}, {1_r, 1_r, 1_r});
+
+    EXPECT_FLOAT_EQ(isInSlab.getVolume(subdomain), 200.0);
+}
 }  // namespace util
 }  // namespace mrmd
