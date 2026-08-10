@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -140,11 +141,11 @@ public:
         auto typeSlice = type;  // avoid capturing this pointer
 
         auto policy = Kokkos::RangePolicy<>(0, numLocalAtoms);
-        auto kernel = KOKKOS_LAMBDA(const idx_t idx, idx_t& localMaxType)
+        auto kernel = KOKKOS_LAMBDA(const idx_t& idx, idx_t& localMaxType)
         {
             if (typeSlice(idx) > localMaxType) localMaxType = typeSlice(idx);
         };
-        Kokkos::parallel_reduce(policy, kernel, maxType);
+        Kokkos::parallel_reduce(policy, kernel, Kokkos::Max<idx_t>(maxType));
         Kokkos::fence();
         return maxType + 1;
     }
