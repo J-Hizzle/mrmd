@@ -28,6 +28,8 @@
 #include "action/LimitAcceleration.hpp"
 #include "action/LimitVelocity.hpp"
 #include "action/VelocityVerletLangevinThermostat.hpp"
+#include "analysis/AxialAverageProfile.hpp"
+#include "analysis/AxialDensityProfile.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -37,6 +39,7 @@
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 #include "initialization.hpp"
+#include "io/DumpProfile.hpp"
 #include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
@@ -75,9 +78,6 @@ struct Config
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
 
-    // equilibration parameters
-    idx_t nstepsEq = 100000;  ///< number of equilibration steps
-
     // thermostat parameters
     real_t temperatureLeft =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
@@ -91,11 +91,18 @@ struct Config
     real_t thermostatRegionMax =
         15_r * sigma;  ///< maximum x-coordinate of the thermodynamic force region
 
+    // profile sampling parameters
+    idx_t profileSamplingInterval = 200;     ///< interval for sampling profiles
+    real_t profileBinWidth = 0.2_r * sigma;  ///< bin width for profiles
+
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
+
+    std::string fileOut = "localThermostat";  ///< base name for output files
+    std::string fileOutDens;
 };
 
 class LeftRightEvaluator
@@ -182,6 +189,14 @@ void lennardJones_localThermostat(Config& config)
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator;
 
+    // set up profile sampling
+    analysis::AxialAverageProfile densityProfile(
+        subdomain,
+        config.profileBinWidth,
+        config.profileBinWidth * subdomain.getAreaNormalToAxis(AXIS::X),
+        atoms.getNumTypes(),
+        AXIS::X);
+
     // set up timer for runtime measurement
     Kokkos::Timer timer;
 
@@ -190,12 +205,18 @@ void lennardJones_localThermostat(Config& config)
     meanSquareDisplacement.reset(atoms);
     auto msd = 0_r;
 
-    // print table header for simulation statistics
-    util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-    util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
-
-    // open statistics file for writing simulation statistics
+    // output management
+    io::DumpProfile dumpDens;
     std::ofstream fStat("statistics.txt");
+    if (config.bOutput)
+    {
+        // print table header for simulation statistics
+        util::printTable("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        util::printTableSep("step", "time", "T", "Ek", "E0", "E", "p", "msd", "Nlocal", "Nghost");
+        dumpDens.open(config.fileOutDens);
+        dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(densityProfile.getAverageProfile())));
+    }
 
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
@@ -239,6 +260,19 @@ void lennardJones_localThermostat(Config& config)
             // update ghost atom positions in the ghost layer according to periodic boundary
             // conditions
             ghostLayer.updateGhostAtoms(atoms, subdomain);
+        }
+
+        if (step % config.profileSamplingInterval == 0)
+        {
+            densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
+        }
+
+        if (config.bOutput && (step % config.outputInterval == 0))
+        {
+            // density profile output
+            auto densityProfileView = Kokkos::create_mirror_view_and_copy(
+                Kokkos::HostSpace(), densityProfile.getAverageProfile(0));
+            dumpDens.dumpScalarView(densityProfileView);
         }
 
         // reset forces to zero
@@ -287,12 +321,17 @@ void lennardJones_localThermostat(Config& config)
         }
     }
 
-    // close statistics file
-    fStat.close();
-    auto time = timer.seconds();
-    std::cout << time << std::endl;
+    if (config.bOutput)
+    {
+        dumpDens.close();
+
+        // close statistics file
+        fStat.close();
+    }
 
     // write performance data to file
+    auto time = timer.seconds();
+    std::cout << time << std::endl;
     auto cores = util::getEnvironmentVariable("OMP_NUM_THREADS");
     std::ofstream fout("ecab.perf", std::ofstream::app);
     fout << cores << ", " << time << ", " << atoms.numLocalAtoms << ", " << config.nsteps
@@ -312,9 +351,9 @@ int main(int argc, char* argv[])
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "total number of simulation steps");
-    app.add_option("-e,--numeq", config.nstepsEq, "number of equilibration steps");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
+    app.add_option("-f,--outfile", config.fileOut, "output file name");
 
     app.add_option("--temperature-left",
                    config.temperatureLeft,
@@ -326,6 +365,8 @@ int main(int argc, char* argv[])
                    "the thermostat)");
 
     CLI11_PARSE(app, argc, argv);
+
+    config.fileOutDens = format("{0}_dens.txt", config.fileOut);
 
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;
