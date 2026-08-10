@@ -37,6 +37,7 @@ concept AxialProfileSampler =
 class AxialAverageProfile
 {
 private:
+    data::MultiHistogram sampledProfile_;
     data::MultiHistogram averageProfile_;
     idx_t numberOfSamples_ = 0;
     real_t normalizationFactor_;
@@ -47,14 +48,34 @@ public:
     template <AxialProfileSampler Sampler>
     void sample(const data::Atoms& atoms, const Sampler& sampler)
     {
-        auto instantaneousProfile = sampler(
+        sampledProfile_ += sampler(
             atoms, averageProfile_.min, averageProfile_.max, averageProfile_.numBins, axis_);
 
-        instantaneousProfile.scale(1_r / normalizationFactor_);
-
-        cumulativeMovingAverage(averageProfile_, instantaneousProfile, real_c(numberOfSamples_));
         numberOfSamples_++;
     }
+
+    void update()
+    {
+        Kokkos::deep_copy(averageProfile_.data, sampledProfile_.data);
+        averageProfile_.scale(1_r / (real_c(numberOfSamples_) * normalizationFactor_));
+        Kokkos::deep_copy(sampledProfile_.data, 0_r);
+    }
+
+    void reweight(const data::MultiHistogram& reweightingHistogram)
+    {
+        MRMD_HOST_CHECK_EQUAL(
+            reweightingHistogram.numBins,
+            averageProfile_.numBins,
+            "reweighting histogram has different number of bins than average profile");
+        MRMD_HOST_CHECK_EQUAL(
+            reweightingHistogram.numHistograms,
+            averageProfile_.numHistograms,
+            "reweighting histogram has different number of histograms than average profile");
+
+        averageProfile_ /= reweightingHistogram;
+    }
+
+    void reset();
 
     inline auto getAverageProfile() const { return averageProfile_; }
     inline auto getAverageProfile(const idx_t& typeId) const
@@ -64,7 +85,13 @@ public:
         return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId);
     }
 
-    void reset();
+    inline auto getSampledProfile() const { return sampledProfile_; }
+    inline auto getSampledProfile(const idx_t& typeId) const
+    {
+        assert(typeId < numTypes_);
+        assert(typeId >= 0);
+        return Kokkos::subview(sampledProfile_.data, Kokkos::ALL(), typeId);
+    }
 
     AxialAverageProfile(const data::Subdomain& subdomain,
                         const real_t binWidth,

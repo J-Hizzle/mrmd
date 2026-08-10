@@ -94,6 +94,7 @@ struct Config
 
     // profile sampling parameters
     idx_t profileSamplingInterval = 200;     ///< interval for sampling profiles
+    idx_t profileUpdateInterval = 10000;       ///< interval for updating profiles
     real_t profileBinWidth = 0.2_r * sigma;  ///< bin width for profiles
 
     // output parameters
@@ -280,6 +281,12 @@ void lennardJones_localThermostat(Config& config)
             densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
 
             temperatureProfile.sample(atoms, analysis::getAxialMeanKineticEnergyProfile);
+        }
+
+        if (step > 0 && step % config.profileUpdateInterval == 0)
+        {
+            densityProfile.update();
+            temperatureProfile.update();
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))

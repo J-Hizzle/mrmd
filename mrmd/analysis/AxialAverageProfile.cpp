@@ -29,6 +29,7 @@ AxialAverageProfile::AxialAverageProfile(const data::Subdomain& subdomain,
                       subdomain.maxCorner[to_underlying(axis)],
                       idx_c(subdomain.diameter[to_underlying(axis)] / binWidth),
                       numTypes),
+      sampledProfile_("sampled-profile", averageProfile_),
       normalizationFactor_(normalizationFactor),
       numTypes_(numTypes),
       axis_(axis)
