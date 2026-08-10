@@ -202,7 +202,7 @@ void lennardJones_localThermostat(Config& config)
     analysis::AxialAverageProfile temperatureProfile(
         subdomain,
         config.profileBinWidth,
-        2_r/3_r,  // normalization factor for kinetic energy to temperature
+        3_r / 2_r,  // normalization factor for kinetic energy to temperature
         atoms.getNumTypes(),
         AXIS::X);
 

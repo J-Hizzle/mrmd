@@ -32,9 +32,9 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
                                                   const AXIS axis);
 
 data::MultiHistogram getAxialMeanKineticEnergyProfile(const data::Atoms& atoms,
-                                                const real_t min,
-                                                const real_t max,
-                                                const idx_t numBins,
-                                                const AXIS axis);
+                                                      const real_t min,
+                                                      const real_t max,
+                                                      const idx_t numBins,
+                                                      const AXIS axis);
 }  // namespace analysis
 }  // namespace mrmd
