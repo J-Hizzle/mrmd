@@ -20,10 +20,10 @@ namespace mrmd
 namespace analysis
 {
 data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
-                                                   const real_t min,
-                                                   const real_t max,
-                                                   const idx_t numBins,
-                                                   const AXIS axis)
+                                                  const real_t min,
+                                                  const real_t max,
+                                                  const idx_t numBins,
+                                                  const AXIS axis)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
 
@@ -33,7 +33,7 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
     auto types = atoms.getType();
     auto velocities = atoms.getVel();
     auto masses = atoms.getMass();
-    
+
     data::MultiHistogram histogram("squared-velocity-profile", min, max, numBins, numTypes);
     MultiScatterView scatter(histogram.data);
 
@@ -45,9 +45,10 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
         auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
         if (bin == -1) return;
         auto access = scatter.access();
-        access(bin, types(idx)) += 0.5_r * masses(idx) * (velocities(idx, 0) * velocities(idx, 0) +
-                                                          velocities(idx, 1) * velocities(idx, 1) +
-                                                          velocities(idx, 2) * velocities(idx, 2));
+        access(bin, types(idx)) +=
+            0.5_r * masses(idx) *
+            (velocities(idx, 0) * velocities(idx, 0) + velocities(idx, 1) * velocities(idx, 1) +
+             velocities(idx, 2) * velocities(idx, 2));
     };
     Kokkos::parallel_for(policy, kernel);
     Kokkos::Experimental::contribute(histogram.data, scatter);
