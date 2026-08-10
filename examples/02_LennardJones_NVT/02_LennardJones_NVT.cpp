@@ -119,7 +119,7 @@ void runLennardJonesNVT(Config& config)
     action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // set up thermostat for temperature control
-    action::VelocityVerletLangevinThermostat integrator(config.friction, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -140,7 +140,8 @@ void runLennardJonesNVT(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);
@@ -180,7 +181,7 @@ void runLennardJonesNVT(Config& config)
         ghostLayer.contributeBackGhostToReal(atoms);
 
         // integrate equations of motion after force calculation
-        integrator.postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))

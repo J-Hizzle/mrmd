@@ -81,7 +81,8 @@ struct Config
     // thermostat parameters
     real_t temperature =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    static constexpr real_t friction =
+        0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -134,7 +135,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat integrator(config.gamma, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -155,7 +156,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -231,7 +233,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         ghostLayer.contributeBackGhostToReal(atoms);
 
         // integrate equations of motion after force calculation
-        integrator.postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))

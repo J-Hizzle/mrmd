@@ -172,8 +172,7 @@ void productionTracer(Config& config)
                                                   config.thermoForceRegionMax);
 
     // set up thermostat for temperature control
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
-                                                                config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -210,7 +209,8 @@ void productionTracer(Config& config)
         countingPlane.startCounting(atoms);
 
         // integrate equations of motion with Langevin thermostat
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         // stop counting particle flux across the plane and calculate flux
         flux += countingPlane.stopCounting(atoms);

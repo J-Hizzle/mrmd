@@ -176,9 +176,8 @@ void thermodynamicForce(Config& config)
                                                   AXIS::X,
                                                   -std::numeric_limits<real_t>::epsilon());
 
-    // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
-                                                                config.temperature);
+    // set up thermostat for temperature control
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up density profile measurement
     analysis::AxialAverageProfile densityProfile(
@@ -231,7 +230,8 @@ void thermodynamicForce(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion with Langevin thermostat
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=

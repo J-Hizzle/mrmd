@@ -221,4 +221,19 @@ concept TwoPositionsPredicate = std::predicate<F,
                                                const real_t   // pos 2 z
                                                >;
 
+// Concept for function evaluation depending on the position of one atom, e.g. for spatially varying
+// temperature or friction coefficient
+template <typename F>
+concept OnePositionEvaluator = std::invocable<F,
+                                              const real_t,  // pos x
+                                              const real_t,  // pos y
+                                              const real_t   // pos z
+                                              > &&
+                               std::same_as<std::invoke_result_t<F,
+                                                                 const real_t,  // pos x
+                                                                 const real_t,  // pos y
+                                                                 const real_t   // pos z
+                                                                 >,
+                                            real_t>;  // return type
+
 }  // namespace mrmd

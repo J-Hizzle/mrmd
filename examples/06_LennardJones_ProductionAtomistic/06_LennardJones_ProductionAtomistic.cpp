@@ -68,8 +68,7 @@ struct Config
         60;  ///< estimated maximum number of neighbors per atom
 
     // thermostat parameters
-    real_t temperature =
-        1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
+    real_t temperature = 1.5_r;     ///< target temperature for thermostat in reduced units
     real_t friction = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 
     // output parameters
@@ -120,8 +119,7 @@ void productionAtomistic(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up thermostat for temperature control
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
-                                                                config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -158,7 +156,8 @@ void productionAtomistic(Config& config)
         countingPlane.startCounting(atoms);
 
         // integrate equations of motion with local Langevin thermostat during production phase
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         // stop counting particle flux across the plane and calculate flux
         flux += countingPlane.stopCounting(atoms);

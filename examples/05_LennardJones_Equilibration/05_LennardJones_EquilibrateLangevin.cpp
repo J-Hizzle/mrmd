@@ -110,8 +110,7 @@ void equilibrateLangevin(Config& config)
     communication::GhostLayer ghostLayer;
     action::LennardJones LJ(config.r_cut, config.sigma, config.epsilon, 0.5_r * config.sigma);
     HalfVerletList verletList;
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.friction,
-                                                                config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
     Kokkos::Timer timer;
     real_t maxAtomDisplacement = std::numeric_limits<real_t>::max();
     idx_t rebuildCounter = 0;
@@ -132,7 +131,8 @@ void equilibrateLangevin(Config& config)
     // main integration loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate(
+            atoms, config.dt, config.temperature, config.friction);
 
         if (maxAtomDisplacement >= config.skin * 0.5_r)
         {

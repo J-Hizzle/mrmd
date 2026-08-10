@@ -54,7 +54,7 @@ void runIdealGas(const Config& config)
     communication::GhostLayer ghostLayer;
 
     // set up thermostat for temperature control
-    action::VelocityVerletLangevinThermostat integrator(config.friction, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -63,13 +63,13 @@ void runIdealGas(const Config& config)
     for (auto i = 0; i < config.nsteps; ++i)
     {
         // integrate equations of motion before (potentially) calculating forces
-        integrator.preForceIntegrate(atoms, config.dt);
+        langevinIntegrator.preForceIntegrate(atoms, config.dt, config.temperature, config.friction);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);
 
         // finish integrating equations of motion
-        integrator.postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output
         if (i % 100 == 0)

@@ -29,26 +29,25 @@ namespace action
 class VelocityVerletLangevinThermostat
 {
 private:
-    Kokkos::Random_XorShift1024_Pool<> randPool_ = Kokkos::Random_XorShift1024_Pool<>(1234);
-    real_t zeta_;
-    real_t temperature_;
+    Kokkos::Random_XorShift1024_Pool<> randPool_;
 
 public:
-    void set(const real_t& zeta, const real_t& temperature)
+    VelocityVerletLangevinThermostat(const idx_t seed = 1234)
+        : randPool_(Kokkos::Random_XorShift1024_Pool<>(seed))
     {
-        zeta_ = zeta;
-        temperature_ = temperature;
     }
 
-    VelocityVerletLangevinThermostat(const real_t& zeta, const real_t& temperature)
-    {
-        set(zeta, temperature);
-    }
-
-    real_t preForceIntegrate(data::Atoms& atoms, const real_t dt)
+    real_t preForceIntegrate(data::Atoms& atoms,
+                             const real_t dt,
+                             const real_t temperature,
+                             const real_t friction)
     {
         return preForceIntegrate_apply_if(
-            atoms, dt, KOKKOS_LAMBDA(const real_t, const real_t, const real_t) { return true; });
+            atoms,
+            dt,
+            temperature,
+            friction,
+            KOKKOS_LAMBDA(const real_t, const real_t, const real_t) { return true; });
     }
 
     void postForceIntegrate(data::Atoms& atoms, const real_t dt)
@@ -56,14 +55,38 @@ public:
         action::VelocityVerlet::postForceIntegrate(atoms, dt);
     }
 
+    template <OnePositionPredicate Pred,
+              OnePositionEvaluator EvalTemp,
+              OnePositionEvaluator EvalFric>
+    real_t preForceIntegrate_apply_if_as(data::Atoms& atoms,
+                                         const real_t dt,
+                                         const Pred& pred,
+                                         const EvalTemp& evalTemperature,
+                                         const EvalFric& evalFriction);
+
     template <OnePositionPredicate Pred>
-    real_t preForceIntegrate_apply_if(data::Atoms& atoms, const real_t dt, const Pred& pred);
+    real_t preForceIntegrate_apply_if(data::Atoms& atoms,
+                                      const real_t dt,
+                                      const real_t temperature,
+                                      const real_t friction,
+                                      const Pred& pred)
+    {
+        return preForceIntegrate_apply_if_as(
+            atoms,
+            dt,
+            pred,
+            KOKKOS_LAMBDA(const real_t, const real_t, const real_t) { return temperature; },
+            KOKKOS_LAMBDA(const real_t, const real_t, const real_t) { return friction; });
+    }
 };
 
-template <OnePositionPredicate Pred>
-real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms& atoms,
-                                                                    const real_t dt,
-                                                                    const Pred& pred)
+template <OnePositionPredicate Pred, OnePositionEvaluator EvalTemp, OnePositionEvaluator EvalFric>
+real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if_as(
+    data::Atoms& atoms,
+    const real_t dt,
+    const Pred& pred,
+    const EvalTemp& evalTemperature,
+    const EvalFric& evalFriction)
 {
     auto RNG = randPool_;
     auto dtHalf(0.5_r * dt);
@@ -72,8 +95,6 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
     auto vel = atoms.getVel();
     auto force = atoms.getForce();
     auto mass = atoms.getMass();
-    auto zeta = zeta_;
-    auto temperature = temperature_;
 
     auto policy = Kokkos::RangePolicy<>(0, atoms.numLocalAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t& idx, real_t& maxDistSqr)
@@ -106,8 +127,8 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
                                             vel(idx, 2),
                                             dtFull,
                                             mass(idx),
-                                            zeta,
-                                            temperature,
+                                            evalFriction(pos(idx, 0), pos(idx, 1), pos(idx, 2)),
+                                            evalTemperature(pos(idx, 0), pos(idx, 1), pos(idx, 2)),
                                             randGen.normal(),
                                             randGen.normal(),
                                             randGen.normal());
@@ -134,6 +155,5 @@ real_t VelocityVerletLangevinThermostat::preForceIntegrate_apply_if(data::Atoms&
     Kokkos::fence();
     return std::sqrt(maxDistSqr);
 }
-
 }  // namespace action
 }  // namespace mrmd

@@ -37,7 +37,7 @@ struct Config
     idx_t nsteps = 21;
     real_t dt = 0.001_r;
     real_t temperature = 1.12_r;
-    real_t gamma = 1_r / dt;
+    real_t friction = 1_r / dt;
 
     real_t Lx = 10_r;
     idx_t numAtoms = 100000;
@@ -85,10 +85,10 @@ TEST(Integration, VelocityVerletLangevinThermostat)
     auto subdomain = data::Subdomain({0_r, 0_r, 0_r}, {config.Lx, config.Lx, config.Lx}, 1_r);
     auto atoms = fillDomainWithAtomsSC(subdomain, config.numAtoms, config.initialMaxVelocity);
 
-    action::VelocityVerletLangevinThermostat vv(1e5_r, config.temperature);
+    action::VelocityVerletLangevinThermostat vv;
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        vv.preForceIntegrate(atoms, config.dt);
+        vv.preForceIntegrate(atoms, config.dt, config.temperature, config.friction);
         vv.postForceIntegrate(atoms, config.dt);
 
         if (config.bOutput && (step % config.outputInterval == 0))
@@ -113,10 +113,10 @@ TEST(Integration, LocalLangevinThermostat)
 
     auto isInSymmetricSlab = util::IsInSymmetricSlab(boxCenter, 0_r, 5.0_r);
 
-    action::VelocityVerletLangevinThermostat vv(1e5_r, config.temperature);
+    action::VelocityVerletLangevinThermostat vv;
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        vv.preForceIntegrate_apply_if(atoms, config.dt, isInSymmetricSlab);
+        vv.preForceIntegrate_apply_if(atoms, config.dt, config.temperature, config.friction, isInSymmetricSlab);
 
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
