@@ -72,16 +72,15 @@ data::Atoms initAtoms()
 TEST(AxialTemperatureProfile, histogram)
 {
     auto atoms = initAtoms();
-
     auto histogram = getAxialKineticEnergyProfile(atoms, 0_r, 10_r, 10, AXIS::X);
 
     auto h_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram.data);
 
     for (auto i = 0; i < 10; ++i)
     {
-        EXPECT_FLOAT_EQ(h_data(i, 0), real_c(1));
-        EXPECT_FLOAT_EQ(h_data(i, 1), real_c(i + 1));
-        EXPECT_FLOAT_EQ(h_data(i, 2), real_c(11 - (i + 1)));
+        EXPECT_FLOAT_EQ(h_data(i, 0), 0.5_r);
+        EXPECT_FLOAT_EQ(h_data(i, 1), real_c(i + 1) * 3_r);
+        EXPECT_FLOAT_EQ(h_data(i, 2), real_c(10 - i) * 7_r * 3_r);
     }
 }
 }  // namespace analysis
