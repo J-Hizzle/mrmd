@@ -37,6 +37,7 @@
 #include "data/Subdomain.hpp"
 #include "datatypes.hpp"
 #include "initialization.hpp"
+#include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
@@ -45,7 +46,7 @@
 using namespace mrmd;
 
 /**
- * Configuration for the Argon NVE example simulation.
+ * Configuration for the Lennard-Jones local thermostat example simulation.
  */
 struct Config
 {
@@ -53,15 +54,18 @@ struct Config
     idx_t nsteps = 400001;               ///< number of steps to simulate
     static constexpr real_t dt = 0.002;  ///< time step size in reduced units
 
+    // input file parameters
+    std::string fileRestoreH5MD =
+        "equilibrateLangevin_final.h5md";  ///< name of the file to restore the initial phase point
+                                           ///< from
+
     // interaction parameters
     static constexpr real_t sigma =
         1_r;  ///< distance at which LJ potential is zero in reduced units
     static constexpr real_t epsilon = 1_r;  ///< energy well depth of LJ potential in reduced units
     static constexpr real_t mass = 1_r;     ///< mass of one atom in reduced units
-    static constexpr real_t maxVelocity =
-        1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    static constexpr real_t r_cap = 0.7_r * sigma;  ///< capping radius for LJ potential
+    real_t r_cap = 0_r;                             ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.1_r * sigma;           ///< skin thickness for neighbor list
@@ -71,17 +75,21 @@ struct Config
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
 
-    // system parameters
-    static constexpr idx_t numAtoms = 16 * 16 * 16;  ///< number of atoms in the simulation
-    real_t Lx = 30_r * sigma;                        ///< box edge length in x-direction
-
     // equilibration parameters
     idx_t nstepsEq = 100000;  ///< number of equilibration steps
 
     // thermostat parameters
-    real_t temperature =
+    real_t temperatureLeft =
         1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    static constexpr real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+    real_t temperatureRight =
+        2_r;  ///< target temperature during equilibration for thermostat in reduced units
+    static constexpr real_t friction =
+        0.04_r / dt;  ///< friction coefficient for Langevin thermostat
+
+    real_t thermostatRegionMin =
+        0_r * sigma;  ///< minimum x-coordinate of the thermodynamic force region
+    real_t thermostatRegionMax =
+        15_r * sigma;  ///< maximum x-coordinate of the thermodynamic force region
 
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
@@ -90,19 +98,56 @@ struct Config
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 };
 
-void runLennardJones_idealGas_localCap(Config& config)
+class LeftRightEvaluator
 {
-    // initialize simulation domain
-    data::Subdomain subdomain({0_r, 0_r, 0_r},
-                              {config.Lx, config.Lx, config.Lx},
-                              {0_r, Config::neighborCutoff, Config::neighborCutoff});
+private:
+    const real_t leftValue_;
+    const real_t rightValue_;
+    const real_t center_;
+    const AXIS axis_;
+
+public:
+    LeftRightEvaluator(real_t leftValue, real_t rightValue, real_t center, AXIS axis)
+        : leftValue_(leftValue), rightValue_(rightValue), center_(center), axis_(axis)
+    {
+    }
+
+    KOKKOS_INLINE_FUNCTION
+    real_t operator()(const real_t x, const real_t y, const real_t z) const
+    {
+        real_t coord = 0_r;
+        switch (axis_)
+        {
+            case AXIS::X:
+                coord = x;
+                break;
+            case AXIS::Y:
+                coord = y;
+                break;
+            case AXIS::Z:
+                coord = z;
+                break;
+        }
+
+        if (coord < center_)
+            return leftValue_;
+        else
+            return rightValue_;
+    }
+};
+
+void lennardJones_localThermostat(Config& config)
+{
+    // initialize
+    data::Subdomain subdomain;
+    auto atoms = data::Atoms(0);
+
+    // load data from file
+    auto io = io::RestoreH5MD();
+    io.restore(config.fileRestoreH5MD, subdomain, atoms);
 
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
-
-    // initialize atoms randomly in the domain
-    auto atoms =
-        util::fillDomainWithAtoms(subdomain, config.numAtoms, config.maxVelocity, config.mass);
 
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
@@ -127,14 +172,15 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "y center: " << boxCenter[1] << std::endl;
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
-    // set up different interaction regions for capped and bare LJ potential
-    util::IsInSymmetricSlab isInNoCapRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 0_r, 10_r * config.sigma);
-    util::IsInSymmetricSlab isInCappingRegion(
-        {boxCenter[0], boxCenter[1], boxCenter[2]}, 10_r * config.sigma, 15_r * config.sigma);
+    // set up regions
+    util::IsInSymmetricSlab isInThermostatRegion(
+        boxCenter, config.thermostatRegionMin, config.thermostatRegionMax);
+
+    LeftRightEvaluator evalTemperature(
+        config.temperatureLeft, config.temperatureRight, boxCenter[0], AXIS::X);
 
     // set up thermostat for temperature control during equilibration
-    action::VelocityVerletLangevinThermostat integrator(config.gamma, config.temperature);
+    action::VelocityVerletLangevinThermostat langevinIntegrator;
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -155,7 +201,12 @@ void runLennardJones_idealGas_localCap(Config& config)
     for (auto step = 0; step < config.nsteps; ++step)
     {
         // integrate equations of motion before force calculation
-        maxAtomDisplacement += integrator.preForceIntegrate(atoms, config.dt);
+        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if_as(
+            atoms,
+            config.dt,
+            isInThermostatRegion,
+            evalTemperature,
+            KOKKOS_LAMBDA(const real_t, const real_t, const real_t) { return config.friction; });
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -194,44 +245,14 @@ void runLennardJones_idealGas_localCap(Config& config)
         auto force = atoms.getForce();
         Cabana::deep_copy(force, 0_r);
 
-        // check if still during equilibration phase
-        if (step <= config.nstepsEq)
-        {
-            // apply capped LJ potential in the whole domain during equilibration
-            lennardJonesCap.apply(atoms, verletList);
-        }
-        else
-        {
-            // compute and apply forces
-            lennardJones.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInNoCapRegion(x1, y1, z1) || isInNoCapRegion(x2, y2, z2);
-                });
-            lennardJonesCap.apply_if(
-                atoms,
-                verletList,
-                KOKKOS_LAMBDA(const real_t x1,
-                              const real_t y1,
-                              const real_t z1,
-                              const real_t x2,
-                              const real_t y2,
-                              const real_t z2) {
-                    return isInCappingRegion(x1, y1, z1) && isInCappingRegion(x2, y2, z2);
-                });
-        }
+        // compute and apply forces
+        lennardJones.apply(atoms, verletList);
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
 
         // integrate equations of motion after force calculation
-        integrator.postForceIntegrate(atoms, config.dt);
+        langevinIntegrator.postForceIntegrate(atoms, config.dt);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))
@@ -291,20 +312,26 @@ int main(int argc, char* argv[])
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "total number of simulation steps");
-    app.add_option("-L,--length", config.Lx, "simulation box diameter");
     app.add_option("-e,--numeq", config.nstepsEq, "number of equilibration steps");
-    app.add_option(
-        "-T,--temperature",
-        config.temperature,
-        "temperature of the Langevin thermostat (negative numbers deactivate the thermostat)");
-    app.add_option("-o,--output", config.outputInterval, "output interval");
+    app.add_option("-o,--outint", config.outputInterval, "output interval");
+    app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
+
+    app.add_option("--temperature-left",
+                   config.temperatureLeft,
+                   "temperature of the left-hand Langevin thermostat (negative numbers deactivate "
+                   "the thermostat)");
+    app.add_option("--temperature-right",
+                   config.temperatureRight,
+                   "temperature of the right-hand Langevin thermostat (negative numbers deactivate "
+                   "the thermostat)");
+
     CLI11_PARSE(app, argc, argv);
 
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;
 
     // set up run simulation
-    runLennardJones_idealGas_localCap(config);
+    lennardJones_localThermostat(config);
 
     return EXIT_SUCCESS;
 }

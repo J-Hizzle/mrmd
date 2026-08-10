@@ -19,6 +19,7 @@ add_executable(09_LennardJones_LocalThermostat
 target_link_libraries(09_LennardJones_LocalThermostat
         PRIVATE mrmd CLI11::CLI11
         )
-add_test(NAME Example.09_LennardJones_LocalThermostat COMMAND ./09_Lenn
-        04_LennardJones_IdealGas_LocalCap.cpp
-        )
+if (MRMD_ENABLE_HDF5)
+configure_file(../05_LennardJones_Equilibration/equilibrateLangevin_final.h5md . COPYONLY)
+add_test(NAME Example.09_LennardJones_LocalThermostat COMMAND ./09_LennardJones_LocalThermostat --nsteps 10)
+endif ()
