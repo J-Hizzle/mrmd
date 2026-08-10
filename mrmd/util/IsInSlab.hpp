@@ -57,20 +57,7 @@ public:
 
     real_t getVolume(const data::Subdomain& subdomain) const
     {
-        real_t volume = 1_r;
-
-        for (auto dim = 0; dim < DIMENSIONS; ++dim)
-        {
-            if (dim == to_underlying(axis_))
-            {
-                volume *= slabMax_ - slabMin_;
-            }
-            else
-            {
-                volume *= subdomain.maxCorner[dim] - subdomain.minCorner[dim];
-            }
-        }
-        return volume;
+        return (slabMax_ - slabMin_) * subdomain.getAreaNormalToAxis(axis_);
     }
 };
 }  // namespace util
