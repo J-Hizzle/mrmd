@@ -19,6 +19,9 @@ mrmd_add_test(NAME test.util.angle
 mrmd_add_test(NAME test.util.ExponentialMovingAverage
         FILES ExponentialMovingAverage.test.cpp)
 
+mrmd_add_test(NAME test.util.IsInSlab
+        FILES IsInSlab.test.cpp)
+
 mrmd_add_test(NAME test.util.IsInSymmetricSlab
         FILES IsInSymmetricSlab.test.cpp)
 
