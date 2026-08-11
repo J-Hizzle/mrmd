@@ -37,8 +37,8 @@ concept AxialProfileSampler =
 class AxialAverageProfile
 {
 private:
-    data::MultiHistogram sampledProfile_;
     data::MultiHistogram averageProfile_;
+    data::MultiHistogram sampledProfile_;
     idx_t numberOfSamples_ = 0;
     real_t normalizationFactor_;
     idx_t numTypes_;
