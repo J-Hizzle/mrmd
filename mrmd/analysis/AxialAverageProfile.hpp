@@ -54,27 +54,9 @@ public:
         numberOfSamples_++;
     }
 
-    void update()
-    {
-        Kokkos::deep_copy(averageProfile_.data, sampledProfile_.data);
-        averageProfile_.scale(1_r / (real_c(numberOfSamples_) * normalizationFactor_));
-        Kokkos::deep_copy(sampledProfile_.data, 0_r);
-        numberOfSamples_ = 0;
-    }
+    void update();
 
-    void reweight(const data::MultiHistogram& reweightingHistogram)
-    {
-        MRMD_HOST_CHECK_EQUAL(
-            reweightingHistogram.numBins,
-            averageProfile_.numBins,
-            "reweighting histogram has different number of bins than average profile");
-        MRMD_HOST_CHECK_EQUAL(
-            reweightingHistogram.numHistograms,
-            averageProfile_.numHistograms,
-            "reweighting histogram has different number of histograms than average profile");
-
-        averageProfile_ /= reweightingHistogram;
-    }
+    void reweight(const data::MultiHistogram& reweightingHistogram);
 
     inline auto getAverageProfile() const { return averageProfile_; }
     inline auto getAverageProfile(const idx_t& typeId) const
