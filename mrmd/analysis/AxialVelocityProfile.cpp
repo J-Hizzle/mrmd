@@ -19,21 +19,21 @@ namespace mrmd
 {
 namespace analysis
 {
-data::MultiHistogram getAxialVelocityProfile(const data::Atoms& atoms,
-                                             const real_t min,
-                                             const real_t max,
-                                             const idx_t numBins,
-                                             const AXIS axis)
+data::MultiHistogram getAxialParallelTotalVelocityProfile(const data::Atoms& atoms,
+                                                          const real_t min,
+                                                          const real_t max,
+                                                          const idx_t numBins,
+                                                          const AXIS axis)
 {
-    return getAxialVelocityProfile(atoms, min, max, numBins, axis, axis);
+    return getAxialTotalVelocityProfile(atoms, min, max, numBins, axis, axis);
 }
 
-data::MultiHistogram getAxialVelocityProfile(const data::Atoms& atoms,
-                                             const real_t min,
-                                             const real_t max,
-                                             const idx_t numBins,
-                                             const AXIS axis,
-                                             const AXIS direction)
+data::MultiHistogram getAxialTotalVelocityProfile(const data::Atoms& atoms,
+                                                  const real_t min,
+                                                  const real_t max,
+                                                  const idx_t numBins,
+                                                  const AXIS axis,
+                                                  const AXIS direction)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
 

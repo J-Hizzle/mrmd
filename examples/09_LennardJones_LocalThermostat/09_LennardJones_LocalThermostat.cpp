@@ -31,6 +31,7 @@
 #include "analysis/AxialAverageProfile.hpp"
 #include "analysis/AxialDensityProfile.hpp"
 #include "analysis/AxialTemperatureProfile.hpp"
+#include "analysis/AxialVelocityProfile.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
 #include "analysis/Pressure.hpp"
@@ -106,6 +107,7 @@ struct Config
     std::string fileOut = "localThermostat";  ///< base name for output files
     std::string fileOutDens;
     std::string fileOutTemp;
+    std::string fileOutVel;
 };
 
 class LeftRightEvaluator
@@ -207,6 +209,9 @@ void lennardJones_localThermostat(Config& config)
         atoms.getNumTypes(),
         AXIS::X);
 
+    analysis::AxialAverageProfile velocityProfile(
+        subdomain, config.profileBinWidth, 1_r, atoms.getNumTypes(), AXIS::X);
+
     // set up timer for runtime measurement
     Kokkos::Timer timer;
 
@@ -218,6 +223,7 @@ void lennardJones_localThermostat(Config& config)
     // output management
     io::DumpProfile dumpDens;
     io::DumpProfile dumpTemp;
+    io::DumpProfile dumpVel;
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
@@ -227,9 +233,14 @@ void lennardJones_localThermostat(Config& config)
         dumpDens.open(config.fileOutDens);
         dumpDens.dumpScalarView(Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), data::createGrid(densityProfile.getAverageProfile())));
+
         dumpTemp.open(config.fileOutTemp);
         dumpTemp.dumpScalarView(Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), data::createGrid(temperatureProfile.getAverageProfile())));
+
+        dumpVel.open(config.fileOutVel);
+        dumpVel.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(velocityProfile.getAverageProfile())));
     }
 
     // main simulation loop
@@ -281,11 +292,16 @@ void lennardJones_localThermostat(Config& config)
             densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
 
             temperatureProfile.sample(atoms, analysis::getAxialKineticEnergyProfile);
+
+            velocityProfile.sample(atoms, analysis::getAxialParallelTotalVelocityProfile);
         }
 
         if (step > 0 && step % config.profileUpdateInterval == 0)
         {
             auto particleNumberProfile = densityProfile.getSampledProfile();
+
+            velocityProfile.update();
+            velocityProfile.reweight(particleNumberProfile);
 
             temperatureProfile.update();
             temperatureProfile.reweight(particleNumberProfile);
@@ -298,9 +314,14 @@ void lennardJones_localThermostat(Config& config)
                 auto densityProfileView = Kokkos::create_mirror_view_and_copy(
                     Kokkos::HostSpace(), densityProfile.getAverageProfile(0));
                 dumpDens.dumpScalarView(densityProfileView);
+
                 auto temperatureProfileView = Kokkos::create_mirror_view_and_copy(
                     Kokkos::HostSpace(), temperatureProfile.getAverageProfile(0));
                 dumpTemp.dumpScalarView(temperatureProfileView);
+
+                auto velocityProfileView = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), velocityProfile.getAverageProfile(0));
+                dumpVel.dumpScalarView(velocityProfileView);
             }
         }
 
@@ -358,6 +379,7 @@ void lennardJones_localThermostat(Config& config)
     {
         dumpDens.close();
         dumpTemp.close();
+        dumpVel.close();
 
         // close statistics file
         fStat.close();
@@ -406,6 +428,7 @@ int main(int argc, char* argv[])
 
     config.fileOutDens = format("{0}_dens.txt", config.fileOut);
     config.fileOutTemp = format("{0}_temp.txt", config.fileOut);
+    config.fileOutVel = format("{0}_vel.txt", config.fileOut);
 
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;

@@ -72,9 +72,9 @@ data::Atoms initAtoms()
 TEST(AxialVelocityProfile, histogram)
 {
     auto atoms = initAtoms();
-    auto histogram_x = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X);
-    auto histogram_y = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Y);
-    auto histogram_z = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Z);
+    auto histogram_x = getAxialParallelTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X);
+    auto histogram_y = getAxialTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Y);
+    auto histogram_z = getAxialTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Z);
 
     auto h_x_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_x.data);
     auto h_y_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_y.data);
