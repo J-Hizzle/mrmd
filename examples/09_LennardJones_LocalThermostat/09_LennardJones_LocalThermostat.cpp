@@ -94,7 +94,7 @@ struct Config
 
     // profile sampling parameters
     idx_t profileSamplingInterval = 200;     ///< interval for sampling profiles
-    idx_t profileUpdateInterval = 10000;       ///< interval for updating profiles
+    idx_t profileUpdateInterval = 10000;     ///< interval for updating profiles
     real_t profileBinWidth = 0.2_r * sigma;  ///< bin width for profiles
 
     // output parameters
