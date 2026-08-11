@@ -1,0 +1,67 @@
+// Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "AxialVelocityProfile.hpp"
+
+namespace mrmd
+{
+namespace analysis
+{
+data::MultiHistogram getAxialVelocityProfile(const data::Atoms& atoms,
+                                             const real_t min,
+                                             const real_t max,
+                                             const idx_t numBins,
+                                             const AXIS axis)
+{
+    return getAxialVelocityProfile(atoms, min, max, numBins, axis, axis);
+}
+
+data::MultiHistogram getAxialVelocityProfile(const data::Atoms& atoms,
+                                             const real_t min,
+                                             const real_t max,
+                                             const idx_t numBins,
+                                             const AXIS axis,
+                                             const AXIS direction)
+{
+    MRMD_HOST_CHECK_GREATEREQUAL(max, min);
+
+    auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
+    auto numTypes = atoms.getNumTypes();
+    auto positions = atoms.getPos();
+    auto type = atoms.getType();
+    auto velocities = atoms.getVel();
+    auto masses = atoms.getMass();
+
+    data::MultiHistogram histogram("velocity-profile", min, max, numBins, numTypes);
+    MultiScatterView scatter(histogram.data);
+
+    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
+        MRMD_DEVICE_ASSERT_GREATEREQUAL(type(idx), 0);
+        MRMD_DEVICE_ASSERT_LESS(type(idx), numTypes);
+        auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
+        if (bin == -1) return;
+        auto access = scatter.access();
+        access(bin, type(idx)) += velocities(idx, to_underlying(direction));
+    };
+    Kokkos::parallel_for(policy, kernel);
+    Kokkos::Experimental::contribute(histogram.data, scatter);
+    Kokkos::fence();
+
+    return histogram;
+}
+}  // namespace analysis
+}  // namespace mrmd

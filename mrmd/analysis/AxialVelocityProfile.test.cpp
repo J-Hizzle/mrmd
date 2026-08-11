@@ -1,0 +1,99 @@
+// Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "AxialVelocityProfile.hpp"
+
+#include <gtest/gtest.h>
+
+namespace mrmd
+{
+namespace analysis
+{
+data::Atoms initAtoms()
+{
+    data::Atoms atoms(100 * 3);
+    atoms.numLocalAtoms = 300;
+
+    auto policy = Kokkos::RangePolicy<>(0, 1);
+    auto kernel = KOKKOS_LAMBDA(const idx_t& /*tmp*/, idx_t& sum)
+    {
+        idx_t idx = 0;
+        for (auto i = 0; i < 10; ++i)
+        {
+            atoms.getPos()(idx, 0) = real_c(i) + 0.5_r;
+            atoms.getVel()(idx, 0) = 1_r;
+            atoms.getVel()(idx, 1) = 0_r;
+            atoms.getVel()(idx, 2) = 0_r;
+            atoms.getMass()(idx) = 1_r;
+            atoms.getType()(idx) = 0;
+            ++idx;
+
+            for (auto j = 0; j < i + 1; ++j)
+            {
+                atoms.getPos()(idx, 0) = real_c(i) + 0.5_r;
+                atoms.getVel()(idx, 0) = 1_r;
+                atoms.getVel()(idx, 1) = 1_r;
+                atoms.getVel()(idx, 2) = 1_r;
+                atoms.getMass()(idx) = 2_r;
+                atoms.getType()(idx) = 1;
+                ++idx;
+
+                atoms.getPos()(idx, 0) = 10_r - (real_c(i) + 0.5_r);
+                atoms.getVel()(idx, 0) = 1_r;
+                atoms.getVel()(idx, 1) = 2_r;
+                atoms.getVel()(idx, 2) = 3_r;
+                atoms.getMass()(idx) = 3_r;
+                atoms.getType()(idx) = 2;
+                ++idx;
+            }
+        }
+        sum += idx;
+    };
+    idx_t numAtoms = 0;
+    Kokkos::parallel_reduce("init-atoms", policy, kernel, numAtoms);
+    Kokkos::fence();
+    atoms.numLocalAtoms = numAtoms;
+
+    return atoms;
+}
+
+TEST(AxialVelocityProfile, histogram)
+{
+    auto atoms = initAtoms();
+    auto histogram_x = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X);
+    auto histogram_y = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Y);
+    auto histogram_z = getAxialVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Z);
+
+    auto h_x_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_x.data);
+    auto h_y_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_y.data);
+    auto h_z_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_z.data);
+
+    for (auto i = 0; i < 10; ++i)
+    {
+        EXPECT_FLOAT_EQ(h_x_data(i, 0), 1_r);
+        EXPECT_FLOAT_EQ(h_x_data(i, 1), real_c(i + 1));
+        EXPECT_FLOAT_EQ(h_x_data(i, 2), real_c(10 - i));
+
+        EXPECT_FLOAT_EQ(h_y_data(i, 0), 0_r);
+        EXPECT_FLOAT_EQ(h_y_data(i, 1), real_c(i + 1));
+        EXPECT_FLOAT_EQ(h_y_data(i, 2), 2_r * real_c(10 - i));
+
+        EXPECT_FLOAT_EQ(h_z_data(i, 0), 0_r);
+        EXPECT_FLOAT_EQ(h_z_data(i, 1), real_c(i + 1));
+        EXPECT_FLOAT_EQ(h_z_data(i, 2), 3_r * real_c(10 - i));
+    }
+}
+}  // namespace analysis
+}  // namespace mrmd

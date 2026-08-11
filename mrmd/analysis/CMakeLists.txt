@@ -19,6 +19,9 @@ mrmd_add_test(NAME test.analysis.AxialDensityProfile
 mrmd_add_test(NAME test.analysis.AxialTemperatureProfile
         FILES AxialTemperatureProfile.test.cpp)
 
+mrmd_add_test(NAME test.analysis.AxialVelocityProfile
+        FILES AxialVelocityProfile.test.cpp)
+
 mrmd_add_test(NAME test.analysis.CountingPlane
         FILES CountingPlane.test.cpp)
 
