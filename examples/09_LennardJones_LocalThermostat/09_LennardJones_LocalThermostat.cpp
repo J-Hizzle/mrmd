@@ -280,24 +280,32 @@ void lennardJones_localThermostat(Config& config)
         {
             densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
 
-            temperatureProfile.sample(atoms, analysis::getAxialMeanKineticEnergyProfile);
+            temperatureProfile.sample(atoms, analysis::getAxialKineticEnergyProfile);
         }
 
         if (step > 0 && step % config.profileUpdateInterval == 0)
         {
-            densityProfile.update();
+            auto particleNumberProfile = densityProfile.getSampledProfile();
+
             temperatureProfile.update();
+            temperatureProfile.reweight(particleNumberProfile);
+
+            densityProfile.update();
+
+            if (config.bOutput)
+            {
+                // profile output
+                auto densityProfileView = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), densityProfile.getAverageProfile(0));
+                dumpDens.dumpScalarView(densityProfileView);
+                auto temperatureProfileView = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), temperatureProfile.getAverageProfile(0));
+                dumpTemp.dumpScalarView(temperatureProfileView);
+            }
         }
 
         if (config.bOutput && (step % config.outputInterval == 0))
         {
-            // profile output
-            auto densityProfileView = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), densityProfile.getAverageProfile(0));
-            dumpDens.dumpScalarView(densityProfileView);
-            auto temperatureProfileView = Kokkos::create_mirror_view_and_copy(
-                Kokkos::HostSpace(), temperatureProfile.getAverageProfile(0));
-            dumpTemp.dumpScalarView(temperatureProfileView);
         }
 
         // reset forces to zero
@@ -380,6 +388,10 @@ int main(int argc, char* argv[])
     app.add_option("-o,--outint", config.outputInterval, "output interval");
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
+
+    app.add_option("--samplingint", config.profileSamplingInterval, "profile sampling interval");
+    app.add_option("--updateint", config.profileUpdateInterval, "profile update interval");
+    app.add_option("--binwidth", config.profileBinWidth, "profile bin width");
 
     app.add_option("--temperature-left",
                    config.temperatureLeft,

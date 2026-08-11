@@ -296,9 +296,6 @@ void thermodynamicForce_initialGuess(Config& config)
                                          config.smoothingInverseDamping,
                                          config.smoothingRange,
                                          isInThermoForceRegion);
-
-            // reset density profile after update
-            densityProfile.reset();
         }
 
         // reset forces to zero

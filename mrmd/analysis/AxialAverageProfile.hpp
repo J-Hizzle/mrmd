@@ -59,6 +59,7 @@ public:
         Kokkos::deep_copy(averageProfile_.data, sampledProfile_.data);
         averageProfile_.scale(1_r / (real_c(numberOfSamples_) * normalizationFactor_));
         Kokkos::deep_copy(sampledProfile_.data, 0_r);
+        numberOfSamples_ = 0;
     }
 
     void reweight(const data::MultiHistogram& reweightingHistogram)
@@ -74,8 +75,6 @@ public:
 
         averageProfile_ /= reweightingHistogram;
     }
-
-    void reset();
 
     inline auto getAverageProfile() const { return averageProfile_; }
     inline auto getAverageProfile(const idx_t& typeId) const

@@ -39,17 +39,5 @@ AxialAverageProfile::AxialAverageProfile(const data::Subdomain& subdomain,
 
     MRMD_HOST_CHECK_GREATER(numTypes, 0);
 }
-
-void AxialAverageProfile::reset()
-{
-    MRMD_HOST_CHECK_GREATER(
-        numberOfSamples_,
-        0,
-        "Cannot reset AxialAverageProfile because no samples have been taken yet.");
-
-    Kokkos::deep_copy(averageProfile_.data, 0_r);
-    numberOfSamples_ = 0;
-}
-
 }  // namespace analysis
 }  // namespace mrmd
