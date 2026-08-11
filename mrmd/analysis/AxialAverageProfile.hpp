@@ -84,12 +84,21 @@ public:
         return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId);
     }
 
-    inline auto getSampledProfile() const { return sampledProfile_; }
+    inline auto getSampledProfile() const
+    {
+        data::MultiHistogram histogram("histogram", sampledProfile_);
+        histogram.scale(1_r / real_c(numberOfSamples_));
+        return histogram;
+    }
+
     inline auto getSampledProfile(const idx_t& typeId) const
     {
         assert(typeId < numTypes_);
         assert(typeId >= 0);
-        return Kokkos::subview(sampledProfile_.data, Kokkos::ALL(), typeId);
+
+        data::MultiHistogram histogram("histogram", sampledProfile_);
+        histogram.scale(1_r / real_c(numberOfSamples_));
+        return Kokkos::subview(histogram.data, Kokkos::ALL(), typeId);
     }
 
     AxialAverageProfile(const data::Subdomain& subdomain,
