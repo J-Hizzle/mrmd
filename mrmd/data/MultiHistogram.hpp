@@ -33,22 +33,35 @@ struct MultiHistogram
                    const real_t maxArg,
                    idx_t numBinsArg,
                    idx_t numHistogramsArg)
+        : MultiHistogram(label, minArg, maxArg, numBinsArg, numHistogramsArg, 1)
+        {
+        }
+
+    MultiHistogram(const std::string& label,
+                   const real_t minArg,
+                   const real_t maxArg,
+                   idx_t numBinsArg,
+                   idx_t numHistogramsArg,
+                   idx_t numDimensionsArg)
         : min(minArg),
           max(maxArg),
           numBins(numBinsArg),
           numHistograms(numHistogramsArg),
+          numDimensions(numDimensionsArg),
           binSize((max - min) / real_c(numBins)),
           inverseBinSize(1_r / binSize),
-          data(label, numBins, numHistograms)
+          data(label, numBins, numHistograms, numDimensions)
     {
         MRMD_HOST_CHECK_GREATER(maxArg, minArg);
         MRMD_HOST_CHECK_GREATEREQUAL(numBinsArg, 0);
         MRMD_HOST_CHECK_GREATEREQUAL(numHistogramsArg, 0);
+        MRMD_HOST_CHECK_GREATER(numDimensionsArg, 0);
+        MRMD_HOST_CHECK_GREATEREQUAL(3, numDimensionsArg);
     }
 
     MultiHistogram(const std::string& label, const MultiHistogram& histogram)
         : MultiHistogram(
-              label, histogram.min, histogram.max, histogram.numBins, histogram.numHistograms)
+              label, histogram.min, histogram.max, histogram.numBins, histogram.numHistograms, histogram.numDimensions)
     {
         Kokkos::deep_copy(data, histogram.data);
     }
@@ -77,9 +90,10 @@ struct MultiHistogram
     const real_t max;
     const idx_t numBins;
     const idx_t numHistograms;
+    const idx_t numDimensions;
     const real_t binSize;
     const real_t inverseBinSize;
-    MultiView data;
+    MultiVectorView data;
 
     MultiHistogram& operator+=(const MultiHistogram& rhs);
     MultiHistogram& operator-=(const MultiHistogram& rhs);
@@ -150,6 +164,8 @@ void transform(const MultiHistogram& input1,
 {
     MRMD_HOST_CHECK_EQUAL(input1.numHistograms, input2.numHistograms);
     MRMD_HOST_CHECK_EQUAL(input1.numHistograms, output.numHistograms);
+    MRMD_HOST_CHECK_EQUAL(input1.numDimensions, input2.numDimensions);
+    MRMD_HOST_CHECK_EQUAL(input1.numDimensions, output.numDimensions);
     MRMD_HOST_CHECK_EQUAL(input1.numBins, input2.numBins);
     MRMD_HOST_CHECK_EQUAL(input1.numBins, output.numBins);
 
@@ -158,10 +174,10 @@ void transform(const MultiHistogram& input1,
     auto outputData = output.data;
 
     auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {input1.numBins, input1.numHistograms});
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx)
+        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {input1.numBins, input1.numHistograms, input1.numDimensions});
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx, const idx_t kdx)
     {
-        outputData(idx, jdx) = binary_op(input1Data(idx, jdx), input2Data(idx, jdx));
+        outputData(idx, jdx, kdx) = binary_op(input1Data(idx, jdx, kdx), input2Data(idx, jdx, kdx));
     };
     Kokkos::parallel_for("MultiHistogram::transform", policy, kernel);
     Kokkos::fence();
@@ -181,12 +197,12 @@ template <OneCoordinatePredicate Pred>
 void replace_if_bin_position(MultiHistogram& hist, const Pred& pred, real_t newValue)
 {
     auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {hist.numBins, hist.numHistograms});
-    auto kernel = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histIdx)
+        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {hist.numBins, hist.numHistograms, hist.numDimensions});
+    auto kernel = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histIdx, const idx_t dimIdx)
     {
         if (pred(hist.getBinPosition(binIdx)))
         {
-            hist.data(binIdx, histIdx) = newValue;
+            hist.data(binIdx, histIdx, dimIdx) = newValue;
         }
     };
     Kokkos::parallel_for("replace_if_bin_position", policy, kernel);
