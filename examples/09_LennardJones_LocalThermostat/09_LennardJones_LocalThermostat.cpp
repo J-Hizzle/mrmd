@@ -305,7 +305,7 @@ void lennardJones_localThermostat(Config& config)
         {
             densityProfile.sample(atoms, analysis::getAxialParticleNumberProfile);
 
-            temperatureProfile.sample(atoms, analysis::getAxialKineticEnergyProfile);
+            temperatureProfile.sample(atoms, analysis::getAxialPeculiarKineticEnergyProfile);
 
             velocityProfile.sample(atoms, analysis::getAxialTotalVelocityVectorProfile);
         }
