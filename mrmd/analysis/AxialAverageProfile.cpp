@@ -61,6 +61,10 @@ void AxialAverageProfile::reweight(const data::MultiHistogram& reweightingHistog
         reweightingHistogram.numHistograms,
         averageProfile_.numHistograms,
         "reweighting histogram has different number of histograms than average profile");
+    MRMD_HOST_CHECK_EQUAL(
+        reweightingHistogram.numDimensions,
+        averageProfile_.numDimensions,
+        "reweighting histogram has different number of dimensions than average profile");
 
     averageProfile_ /= reweightingHistogram;
 }
