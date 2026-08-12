@@ -72,8 +72,12 @@ action::ThermodynamicForce restoreThermoForce(
     }
     fileThermoForce.close();
 
-    auto h_forces =
-        Kokkos::subview(h_forcesRead, Kokkos::make_pair(0, binNum), Kokkos::make_pair(0, histNum), Kokkos::make_pair(0, 1));
+    MultiVectorView::HostMirror h_forces("h_forces", binNum, histNum, 1);
+
+    for (idx_t i = 0; i < binNum; ++i)
+        for (idx_t j = 0; j < histNum; ++j)
+            h_forces(i, j, 0) = h_forcesRead(i, j, 0);
+
     MultiVectorView d_forces("d_forces", binNum, histNum, 1);
     Kokkos::deep_copy(d_forces, h_forces);
 
