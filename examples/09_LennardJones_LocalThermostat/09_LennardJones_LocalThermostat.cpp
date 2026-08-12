@@ -107,7 +107,9 @@ struct Config
     std::string fileOut = "localThermostat";  ///< base name for output files
     std::string fileOutDens;
     std::string fileOutTemp;
-    std::string fileOutVel;
+    std::string fileOutVelX;
+    std::string fileOutVelY;
+    std::string fileOutVelZ;
 };
 
 class LeftRightEvaluator
@@ -223,7 +225,9 @@ void lennardJones_localThermostat(Config& config)
     // output management
     io::DumpProfile dumpDens;
     io::DumpProfile dumpTemp;
-    io::DumpProfile dumpVel;
+    io::DumpProfile dumpVelX;
+    io::DumpProfile dumpVelY;
+    io::DumpProfile dumpVelZ;
     std::ofstream fStat("statistics.txt");
     if (config.bOutput)
     {
@@ -238,8 +242,14 @@ void lennardJones_localThermostat(Config& config)
         dumpTemp.dumpScalarView(Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), data::createGrid(temperatureProfile.getAverageProfile())));
 
-        dumpVel.open(config.fileOutVel);
-        dumpVel.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+        dumpVelX.open(config.fileOutVelX);
+        dumpVelX.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(velocityProfile.getAverageProfile())));
+        dumpVelY.open(config.fileOutVelY);
+        dumpVelY.dumpScalarView(Kokkos::create_mirror_view_and_copy(
+            Kokkos::HostSpace(), data::createGrid(velocityProfile.getAverageProfile())));
+        dumpVelZ.open(config.fileOutVelZ);
+        dumpVelZ.dumpScalarView(Kokkos::create_mirror_view_and_copy(
             Kokkos::HostSpace(), data::createGrid(velocityProfile.getAverageProfile())));
     }
 
@@ -299,9 +309,10 @@ void lennardJones_localThermostat(Config& config)
         if (step > 0 && step % config.profileUpdateInterval == 0)
         {
             auto particleNumberProfile = densityProfile.getSampledProfile();
+            auto vectorParticleNumberProfile = particleNumberProfile.getHighDimensionalHistogramWithFilledValues(3);
 
             velocityProfile.update();
-            velocityProfile.reweight(particleNumberProfile);
+            velocityProfile.reweight(vectorParticleNumberProfile);
 
             temperatureProfile.update();
             temperatureProfile.reweight(particleNumberProfile);
@@ -319,9 +330,17 @@ void lennardJones_localThermostat(Config& config)
                     Kokkos::HostSpace(), temperatureProfile.getAverageProfile(0));
                 dumpTemp.dumpScalarView(temperatureProfileView);
 
-                auto velocityProfileView = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace(), velocityProfile.getAverageProfile(0));
-                dumpVel.dumpScalarView(velocityProfileView);
+                auto velocityProfileViewX = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), velocityProfile.getAverageProfile(0, AXIS::X));
+                dumpVelX.dumpScalarView(velocityProfileViewX);
+
+                auto velocityProfileViewY = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), velocityProfile.getAverageProfile(0, AXIS::Y));
+                dumpVelY.dumpScalarView(velocityProfileViewY);
+
+                auto velocityProfileViewZ = Kokkos::create_mirror_view_and_copy(
+                    Kokkos::HostSpace(), velocityProfile.getAverageProfile(0, AXIS::Z));
+                dumpVelZ.dumpScalarView(velocityProfileViewZ);
             }
         }
 
@@ -379,7 +398,9 @@ void lennardJones_localThermostat(Config& config)
     {
         dumpDens.close();
         dumpTemp.close();
-        dumpVel.close();
+        dumpVelX.close();
+        dumpVelY.close();
+        dumpVelZ.close();
 
         // close statistics file
         fStat.close();
@@ -428,7 +449,9 @@ int main(int argc, char* argv[])
 
     config.fileOutDens = format("{0}_dens.txt", config.fileOut);
     config.fileOutTemp = format("{0}_temp.txt", config.fileOut);
-    config.fileOutVel = format("{0}_vel.txt", config.fileOut);
+    config.fileOutVelX = format("{0}_velx.txt", config.fileOut);
+    config.fileOutVelY = format("{0}_vely.txt", config.fileOut);
+    config.fileOutVelZ = format("{0}_velz.txt", config.fileOut);
 
     // reset output parameter if output interval is negative
     if (config.outputInterval < 0) config.bOutput = false;
