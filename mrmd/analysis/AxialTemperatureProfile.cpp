@@ -59,45 +59,68 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
     return histogram;
 }
 
-// data::MultiHistogram getAxialPeculiarKineticEnergyProfile(const data::Atoms& atoms,
-//                                                   const real_t min,
-//                                                   const real_t max,
-//                                                   const idx_t numBins,
-//                                                   const AXIS axis)
-//{
-//     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
-//
-//     auto peculiarVelocity = analysis::getAxialTotalVelocityProfile(atoms, min, max, numBins,
-//     axis);
-//
-//     auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
-//     auto numTypes = atoms.getNumTypes();
-//     auto positions = atoms.getPos();
-//     auto type = atoms.getType();
-//     auto velocities = atoms.getVel();
-//     auto masses = atoms.getMass();
-//
-//     data::MultiHistogram histogram("kinetic-energy-profile", min, max, numBins, numTypes);
-//     MultiScatterView scatter(histogram.data);
-//
-//     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
-//     auto kernel = KOKKOS_LAMBDA(const idx_t idx)
-//     {
-//         MRMD_DEVICE_ASSERT_GREATEREQUAL(type(idx), 0);
-//         MRMD_DEVICE_ASSERT_LESS(type(idx), numTypes);
-//         auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
-//         if (bin == -1) return;
-//         auto access = scatter.access();
-//         access(bin, type(idx)) +=
-//             0.5_r * masses(idx) *
-//             (velocities(idx, 0) * velocities(idx, 0) + velocities(idx, 1) * velocities(idx, 1) +
-//              velocities(idx, 2) * velocities(idx, 2));
-//     };
-//     Kokkos::parallel_for(policy, kernel);
-//     Kokkos::Experimental::contribute(histogram.data, scatter);
-//     Kokkos::fence();
-//
-//     return histogram;
-// }
+data::MultiHistogram getAxialPeculiarKineticEnergyProfile(const data::Atoms& atoms,
+                                                          const real_t min,
+                                                          const real_t max,
+                                                          const idx_t numBins,
+                                                          const AXIS axis)
+{
+    // see eq. (10.19) on p. 289 of Statistical Mechanics of Nonequilibrium Liquids by Denis J.
+    // Evans and Gary Morriss
+    MRMD_HOST_CHECK_GREATEREQUAL(max, min);
+
+    const auto streamingVelocity =
+        analysis::getAxialStreamingVelocityProfile(atoms, min, max, numBins, axis);
+
+    const auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
+    const auto numTypes = atoms.getNumTypes();
+    const auto positions = atoms.getPos();
+    const auto types = atoms.getType();
+    const auto velocities = atoms.getVel();
+    const auto masses = atoms.getMass();
+
+    data::MultiHistogram histogram("kinetic-energy-profile", min, max, numBins, numTypes);
+    MultiVectorView energyAccum("peculiar-kinetic-energy-accum", numBins, numTypes, 1);
+
+    auto streamingVelocityView = streamingVelocity.data;
+    auto energyAccumView = energyAccum;
+
+    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
+        MRMD_DEVICE_ASSERT_GREATEREQUAL(types(idx), 0);
+        MRMD_DEVICE_ASSERT_LESS(types(idx), numTypes);
+
+        const auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
+        if (bin == -1) return;
+
+        const auto peculiarVelocityX =
+            velocities(idx, 0) - streamingVelocityView(bin, types(idx), 0);
+        const auto peculiarVelocityY =
+            velocities(idx, 1) - streamingVelocityView(bin, types(idx), 1);
+        const auto peculiarVelocityZ =
+            velocities(idx, 2) - streamingVelocityView(bin, types(idx), 2);
+
+        const auto value =
+            0.5_r * masses(idx) *
+            (peculiarVelocityX * peculiarVelocityX + peculiarVelocityY * peculiarVelocityY +
+             peculiarVelocityZ * peculiarVelocityZ);
+
+        Kokkos::atomic_add(&energyAccumView(bin, types(idx), 0), value);
+    };
+    Kokkos::parallel_for("AxialPeculiarKineticEnergyProfile::accumulate", policy, kernel);
+    Kokkos::fence();
+
+    auto finalizePolicy = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numBins, numTypes});
+    auto finalizeKernel = KOKKOS_LAMBDA(const idx_t bin, const idx_t typeId)
+    {
+        histogram.data(bin, typeId, 0) = energyAccumView(bin, typeId, 0);
+    };
+    Kokkos::parallel_for(
+        "AxialPeculiarKineticEnergyProfile::finalize", finalizePolicy, finalizeKernel);
+    Kokkos::fence();
+
+    return histogram;
+}
 }  // namespace analysis
 }  // namespace mrmd

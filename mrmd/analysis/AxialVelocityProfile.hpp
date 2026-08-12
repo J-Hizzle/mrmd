@@ -30,5 +30,11 @@ data::MultiHistogram getAxialTotalVelocityVectorProfile(const data::Atoms& atoms
                                                         const real_t max,
                                                         const idx_t numBins,
                                                         const AXIS gridAxis);
+
+data::MultiHistogram getAxialStreamingVelocityProfile(const data::Atoms& atoms,
+                                                      const real_t min,
+                                                      const real_t max,
+                                                      const idx_t numBins,
+                                                      const AXIS gridAxis);
 }  // namespace analysis
 }  // namespace mrmd
