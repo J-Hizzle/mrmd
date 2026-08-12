@@ -26,9 +26,9 @@ namespace mrmd
 namespace analysis
 {
 data::MultiHistogram getAxialTotalVelocityVectorProfile(const data::Atoms& atoms,
-                                                  const real_t min,
-                                                  const real_t max,
-                                                  const idx_t numBins,
-                                                  const AXIS gridAxis);
+                                                        const real_t min,
+                                                        const real_t max,
+                                                        const idx_t numBins,
+                                                        const AXIS gridAxis);
 }  // namespace analysis
 }  // namespace mrmd

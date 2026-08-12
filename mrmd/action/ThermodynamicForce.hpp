@@ -50,13 +50,13 @@ public:
         assert(typeId >= 0);
         return Kokkos::subview(force_.data, Kokkos::ALL(), typeId, 0);
     }
-    inline void setForce(const MultiVectorView& forces) const 
-    { 
+    inline void setForce(const MultiVectorView& forces) const
+    {
         assert(forces.extent(0) == force_.numBins);
         assert(forces.extent(1) == force_.numHistograms);
         assert(forces.extent(2) == 1);
 
-        Kokkos::deep_copy(force_.data, forces); 
+        Kokkos::deep_copy(force_.data, forces);
     }
 
     void update(const data::MultiHistogram& densityProfile,

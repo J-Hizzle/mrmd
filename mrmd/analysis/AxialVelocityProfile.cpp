@@ -19,19 +19,19 @@ namespace mrmd
 {
 namespace analysis
 {
-//data::MultiHistogram getAxialPeculiarVelocityProfile(const data::Atoms& atoms,
-//                                                  const real_t min,
-//                                                  const real_t max,
-//                                                  const idx_t numBins,
-//                                                  const AXIS axis)
+// data::MultiHistogram getAxialPeculiarVelocityProfile(const data::Atoms& atoms,
+//                                                   const real_t min,
+//                                                   const real_t max,
+//                                                   const idx_t numBins,
+//                                                   const AXIS axis)
 //{
-//}
+// }
 
 data::MultiHistogram getAxialTotalVelocityVectorProfile(const data::Atoms& atoms,
-                                                  const real_t min,
-                                                  const real_t max,
-                                                  const idx_t numBins,
-                                                  const AXIS gridAxis)
+                                                        const real_t min,
+                                                        const real_t max,
+                                                        const idx_t numBins,
+                                                        const AXIS gridAxis)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
 

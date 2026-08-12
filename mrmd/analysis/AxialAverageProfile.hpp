@@ -15,10 +15,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <type_traits>
 #include <vector>
-#include <algorithm>
 
 #include "data/Atoms.hpp"
 #include "data/MultiHistogram.hpp"
@@ -120,7 +120,8 @@ public:
                         const real_t normalizationFactor,
                         const idx_t numTypes,
                         const AXIS& gridAxis)
-        : AxialAverageProfile(subdomain, binWidth, normalizationFactor, numTypes, gridAxis, {gridAxis})
+        : AxialAverageProfile(
+              subdomain, binWidth, normalizationFactor, numTypes, gridAxis, {gridAxis})
     {
     }
 

@@ -48,8 +48,8 @@ MultiHistogram& MultiHistogram::operator/=(const MultiHistogram& rhs)
 void MultiHistogram::scale(const real_t& scalingFactor)
 {
     auto hist = data;  // avoid capturing this pointer
-    auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)}, {numBins, numHistograms, numDimensions});
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)},
+                                                         {numBins, numHistograms, numDimensions});
     auto normalizeSampleKernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx, const idx_t kdx)
     {
         hist(idx, jdx, kdx) *= scalingFactor;
@@ -63,8 +63,8 @@ void MultiHistogram::scale(const ScalarView& scalingFactor)
     MRMD_HOST_CHECK_GREATEREQUAL(idx_c(scalingFactor.extent(0)), numHistograms);
 
     auto hist = data;  // avoid capturing this pointer
-    auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)}, {numBins, numHistograms, numDimensions});
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)},
+                                                         {numBins, numHistograms, numDimensions});
     auto normalizeSampleKernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx, const idx_t kdx)
     {
         hist(idx, jdx, kdx) *= scalingFactor(jdx);
@@ -77,8 +77,8 @@ void MultiHistogram::makeSymmetric()
 {
     auto maxIdx = numBins - 1;
     auto hist = data;  // avoid capturing this pointer
-    auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)}, {numBins / 2, numHistograms, numDimensions});
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
+        {idx_t(0), idx_t(0), idx_t(0)}, {numBins / 2, numHistograms, numDimensions});
     auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx, const idx_t kdx)
     {
         auto val = 0.5_r * (hist(idx, jdx, kdx) + hist(maxIdx - idx, jdx, kdx));
@@ -96,8 +96,9 @@ void cumulativeMovingAverage(data::MultiHistogram& average,
     MRMD_HOST_CHECK_EQUAL(average.numBins, current.numBins);
     MRMD_HOST_CHECK_EQUAL(average.numHistograms, current.numHistograms);
 
-    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)},
-                                                         {average.numBins, average.numHistograms, average.numDimensions});
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
+        {idx_t(0), idx_t(0), idx_t(0)},
+        {average.numBins, average.numHistograms, average.numDimensions});
     auto kernel = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histogramIdx, const idx_t dimIdx)
     {
         // use running average to calculate new mean compensation energy
@@ -115,9 +116,10 @@ data::MultiHistogram gradient(const data::MultiHistogram& input, const bool peri
     const auto inverseSpacing = input.inverseBinSize;
     const auto inverseDoubleSpacing = 0.5_r * input.inverseBinSize;
 
-    data::MultiHistogram grad("gradient", input.min, input.max, input.numBins, input.numHistograms, input.numDimensions);
-    auto policy =
-        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {input.numBins, input.numHistograms, input.numDimensions});
+    data::MultiHistogram grad(
+        "gradient", input.min, input.max, input.numBins, input.numHistograms, input.numDimensions);
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
+        {0, 0, 0}, {input.numBins, input.numHistograms, input.numDimensions});
     auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx, const idx_t kdx)
     {
         if (idx == 0)
@@ -141,7 +143,8 @@ data::MultiHistogram gradient(const data::MultiHistogram& input, const bool peri
             if (periodic)
             {
                 grad.data(idx, jdx, kdx) =
-                    (input.data(0, jdx, kdx) - input.data(idx - 1, jdx, kdx)) * inverseDoubleSpacing;
+                    (input.data(0, jdx, kdx) - input.data(idx - 1, jdx, kdx)) *
+                    inverseDoubleSpacing;
             }
             else
             {
@@ -169,11 +172,15 @@ data::MultiHistogram smoothen(const data::MultiHistogram& input,
     /// how many neighboring bins are affected
     const idx_t delta = int_c(range * sigma * input.inverseBinSize);
 
-    data::MultiHistogram smoothenedDensityProfile(
-        "smooth-input", input.min, input.max, input.numBins, input.numHistograms, input.numDimensions);
+    data::MultiHistogram smoothenedDensityProfile("smooth-input",
+                                                  input.min,
+                                                  input.max,
+                                                  input.numBins,
+                                                  input.numHistograms,
+                                                  input.numDimensions);
 
-    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>({idx_t(0), idx_t(0), idx_t(0)},
-                                                         {input.numBins, input.numHistograms, input.numDimensions});
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
+        {idx_t(0), idx_t(0), idx_t(0)}, {input.numBins, input.numHistograms, input.numDimensions});
     auto kernel = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histogramIdx, const idx_t dimIdx)
     {
         auto normalization = 0_r;

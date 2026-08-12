@@ -211,8 +211,12 @@ void lennardJones_localThermostat(Config& config)
         atoms.getNumTypes(),
         AXIS::X);
 
-    analysis::AxialAverageProfile velocityProfile(
-        subdomain, config.profileBinWidth, 1_r, atoms.getNumTypes(), AXIS::X, {AXIS::X, AXIS::Y, AXIS::Z});
+    analysis::AxialAverageProfile velocityProfile(subdomain,
+                                                  config.profileBinWidth,
+                                                  1_r,
+                                                  atoms.getNumTypes(),
+                                                  AXIS::X,
+                                                  {AXIS::X, AXIS::Y, AXIS::Z});
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -309,7 +313,8 @@ void lennardJones_localThermostat(Config& config)
         if (step > 0 && step % config.profileUpdateInterval == 0)
         {
             auto particleNumberProfile = densityProfile.getSampledProfile();
-            auto vectorParticleNumberProfile = particleNumberProfile.getHighDimensionalHistogramWithFilledValues(3);
+            auto vectorParticleNumberProfile =
+                particleNumberProfile.getHighDimensionalHistogramWithFilledValues(3);
 
             velocityProfile.update();
             velocityProfile.reweight(vectorParticleNumberProfile);

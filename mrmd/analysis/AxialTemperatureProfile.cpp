@@ -14,6 +14,7 @@
 // limitations under the License.
 
 #include "AxialTemperatureProfile.hpp"
+
 #include "AxialVelocityProfile.hpp"
 
 namespace mrmd
@@ -58,44 +59,45 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
     return histogram;
 }
 
-//data::MultiHistogram getAxialPeculiarKineticEnergyProfile(const data::Atoms& atoms,
-//                                                  const real_t min,
-//                                                  const real_t max,
-//                                                  const idx_t numBins,
-//                                                  const AXIS axis)
+// data::MultiHistogram getAxialPeculiarKineticEnergyProfile(const data::Atoms& atoms,
+//                                                   const real_t min,
+//                                                   const real_t max,
+//                                                   const idx_t numBins,
+//                                                   const AXIS axis)
 //{
-//    MRMD_HOST_CHECK_GREATEREQUAL(max, min);
+//     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
 //
-//    auto peculiarVelocity = analysis::getAxialTotalVelocityProfile(atoms, min, max, numBins, axis);
-//    
-//    auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
-//    auto numTypes = atoms.getNumTypes();
-//    auto positions = atoms.getPos();
-//    auto type = atoms.getType();
-//    auto velocities = atoms.getVel();
-//    auto masses = atoms.getMass();
+//     auto peculiarVelocity = analysis::getAxialTotalVelocityProfile(atoms, min, max, numBins,
+//     axis);
 //
-//    data::MultiHistogram histogram("kinetic-energy-profile", min, max, numBins, numTypes);
-//    MultiScatterView scatter(histogram.data);
+//     auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
+//     auto numTypes = atoms.getNumTypes();
+//     auto positions = atoms.getPos();
+//     auto type = atoms.getType();
+//     auto velocities = atoms.getVel();
+//     auto masses = atoms.getMass();
 //
-//    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
-//    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
-//    {
-//        MRMD_DEVICE_ASSERT_GREATEREQUAL(type(idx), 0);
-//        MRMD_DEVICE_ASSERT_LESS(type(idx), numTypes);
-//        auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
-//        if (bin == -1) return;
-//        auto access = scatter.access();
-//        access(bin, type(idx)) +=
-//            0.5_r * masses(idx) *
-//            (velocities(idx, 0) * velocities(idx, 0) + velocities(idx, 1) * velocities(idx, 1) +
-//             velocities(idx, 2) * velocities(idx, 2));
-//    };
-//    Kokkos::parallel_for(policy, kernel);
-//    Kokkos::Experimental::contribute(histogram.data, scatter);
-//    Kokkos::fence();
+//     data::MultiHistogram histogram("kinetic-energy-profile", min, max, numBins, numTypes);
+//     MultiScatterView scatter(histogram.data);
 //
-//    return histogram;
-//}
+//     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
+//     auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+//     {
+//         MRMD_DEVICE_ASSERT_GREATEREQUAL(type(idx), 0);
+//         MRMD_DEVICE_ASSERT_LESS(type(idx), numTypes);
+//         auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
+//         if (bin == -1) return;
+//         auto access = scatter.access();
+//         access(bin, type(idx)) +=
+//             0.5_r * masses(idx) *
+//             (velocities(idx, 0) * velocities(idx, 0) + velocities(idx, 1) * velocities(idx, 1) +
+//              velocities(idx, 2) * velocities(idx, 2));
+//     };
+//     Kokkos::parallel_for(policy, kernel);
+//     Kokkos::Experimental::contribute(histogram.data, scatter);
+//     Kokkos::fence();
+//
+//     return histogram;
+// }
 }  // namespace analysis
 }  // namespace mrmd
