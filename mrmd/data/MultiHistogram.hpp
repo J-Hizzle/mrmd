@@ -71,6 +71,29 @@ struct MultiHistogram
         return numDimensions;
     }
 
+    MultiHistogram getHighDimensionalHistogramWithFilledValues(const idx_t newNumDimensions) const
+    {
+        MRMD_HOST_CHECK_EQUAL(numDimensions, 1);
+        MRMD_HOST_CHECK_GREATEREQUAL(newNumDimensions, 1);
+        MRMD_HOST_CHECK_GREATEREQUAL(3, newNumDimensions);
+
+        auto dataView = data; // avoid capturing this pointer
+
+        MultiHistogram newHistogram("newHistogram", min, max, numBins, numHistograms, newNumDimensions);
+        
+        auto range = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numBins, numHistograms});
+        auto policy = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histIdx) {
+            auto value = dataView(binIdx, histIdx, 0);
+            for (idx_t dimIdx = 0; dimIdx < newNumDimensions; ++dimIdx)
+            {
+                newHistogram.data(binIdx, histIdx, dimIdx) = value;
+            }
+        };
+
+        Kokkos::parallel_for("vectorParticleNumberProfile", range, policy);
+        return newHistogram;
+    }
+
     /**
      * @param val input value
      * @return corresponding bin or -1 if outside of range
