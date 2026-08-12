@@ -23,7 +23,8 @@ namespace analysis
 {
 real_t getFluctuation(const data::MultiHistogram& hist,
                       const real_t& reference,
-                      const idx_t& specimen);
+                      const idx_t& specimen,
+                      const idx_t& dimId = 0);
 
 }  // namespace analysis
 }  // namespace mrmd

@@ -85,7 +85,7 @@ ThermodynamicForce getThermodynamicForce()
     auto policyForce = Kokkos::RangePolicy<>(0, forceHistogram.numBins);
     auto kernelForce = KOKKOS_LAMBDA(const idx_t& idx)
     {
-        forceHistogram.data(idx, 0) = real_c(idx);
+        forceHistogram.data(idx, 0, 0) = real_c(idx);
     };
     Kokkos::parallel_for("getThermodynamicForce", policyForce, kernelForce);
     Kokkos::fence();
@@ -98,7 +98,7 @@ data::MultiHistogram getDensityProfile()
     auto densHist = data::MultiHistogram("densHist", 0_r, 10_r, 10, 1);
     Kokkos::parallel_for(
         "init_densHist", Kokkos::RangePolicy<>(0, 10), KOKKOS_LAMBDA(const idx_t idx) {
-            densHist.data(idx, 0) = real_c(idx);
+            densHist.data(idx, 0, 0) = real_c(idx);
         });
     Kokkos::fence();
     return densHist;

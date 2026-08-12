@@ -55,7 +55,7 @@ action::ThermodynamicForce restoreThermoForce(
     MRMD_HOST_ASSERT_GREATER(binNum, 1);
     real_t binWidth = grid1 - grid0;
 
-    MultiView::HostMirror h_forcesRead("h_forcesRead", binNum, maxNumForces);
+    MultiVectorView::HostMirror h_forcesRead("h_forcesRead", binNum, maxNumForces, 1);
 
     while (std::getline(fileThermoForce, line))
     {
@@ -63,7 +63,7 @@ action::ThermodynamicForce restoreThermoForce(
         std::stringstream forceLineStream(line);
         while (forceLineStream >> word)
         {
-            h_forcesRead(binNum, histNum) = std::stod(word);
+            h_forcesRead(binNum, histNum, 0) = std::stod(word);
             binNum++;
         }
         histNum++;
@@ -73,8 +73,8 @@ action::ThermodynamicForce restoreThermoForce(
     fileThermoForce.close();
 
     auto h_forces =
-        Kokkos::subview(h_forcesRead, Kokkos::make_pair(0, binNum), Kokkos::make_pair(0, histNum));
-    MultiView d_forces("d_forces", binNum, histNum);
+        Kokkos::subview(h_forcesRead, Kokkos::make_pair(0, binNum), Kokkos::make_pair(0, histNum), Kokkos::make_pair(0, 1));
+    MultiVectorView d_forces("d_forces", binNum, histNum, 1);
     Kokkos::deep_copy(d_forces, h_forces);
 
     action::ThermodynamicForce thermodynamicForce(targetDensities,

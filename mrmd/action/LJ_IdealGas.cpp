@@ -31,19 +31,19 @@ void updateMeanCompensationEnergy(data::MultiHistogram& compensationEnergy,
     auto kernel = KOKKOS_LAMBDA(const idx_t binIdx, const idx_t histogramIdx)
     {
         // check if there is at least one entry in this bin
-        if (compensationEnergyCounter.data(binIdx, histogramIdx) < 0.5_r) return;
-        assert(compensationEnergyCounter.data(binIdx, histogramIdx) > 0);
-        auto energy = compensationEnergy.data(binIdx, histogramIdx) /
-                      compensationEnergyCounter.data(binIdx, histogramIdx);
+        if (compensationEnergyCounter.data(binIdx, histogramIdx, 0) < 0.5_r) return;
+        assert(compensationEnergyCounter.data(binIdx, histogramIdx, 0) > 0);
+        auto energy = compensationEnergy.data(binIdx, histogramIdx, 0) /
+                      compensationEnergyCounter.data(binIdx, histogramIdx, 0);
 
         // use running average to calculate new mean compensation energy
-        meanCompensationEnergy.data(binIdx, histogramIdx) =
-            (runningAverageFactor * meanCompensationEnergy.data(binIdx, histogramIdx) + energy) /
+        meanCompensationEnergy.data(binIdx, histogramIdx, 0) =
+            (runningAverageFactor * meanCompensationEnergy.data(binIdx, histogramIdx, 0) + energy) /
             (runningAverageFactor + 1_r);
 
         // reset accumulation histograms
-        compensationEnergy.data(binIdx, histogramIdx) = 0_r;
-        compensationEnergyCounter.data(binIdx, histogramIdx) = 0_r;
+        compensationEnergy.data(binIdx, histogramIdx, 0) = 0_r;
+        compensationEnergyCounter.data(binIdx, histogramIdx, 0) = 0_r;
     };
     Kokkos::parallel_for("updateMeanCompensationEnergy", policy, kernel);
     Kokkos::fence();
@@ -180,10 +180,10 @@ KOKKOS_FUNCTION void LJ_IdealGas::operator()(const idx_t& alpha, real_t& sumEner
                             auto access = compensationEnergyScatter_.access();
                             if (weighting_function::isInHYRegion(modulatedLambdaAlpha) &&
                                 (binAlpha != -1))
-                                access(binAlpha, atomsType_(idx)) += Vij;
+                                access(binAlpha, atomsType_(idx), 0) += Vij;
                             if (weighting_function::isInHYRegion(modulatedLambdaBeta) &&
                                 (binBeta != -1))
-                                access(binBeta, atomsType_(jdx)) += Vij;
+                                access(binBeta, atomsType_(jdx), 0) += Vij;
                         }
                     }
                 }
@@ -204,18 +204,18 @@ KOKKOS_FUNCTION void LJ_IdealGas::operator()(const idx_t& alpha, real_t& sumEner
         for (idx_t atomIdx = startAtomsAlpha; atomIdx < endAtomsAlpha; ++atomIdx)
         {
             if (weighting_function::isInHYRegion(modulatedLambdaAlpha) && (binAlpha != -1))
-                compensationEnergyCounter_.data(binAlpha, atomsType_(atomIdx)) += 1_r;
+                compensationEnergyCounter_.data(binAlpha, atomsType_(atomIdx), 0) += 1_r;
         }
     }
 
     // drift force compensation
     if (weighting_function::isInHYRegion(modulatedLambdaAlpha) && (binAlpha != -1))
     {
-        forceTmpAlpha[0] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha)) *
+        forceTmpAlpha[0] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha), 0) *
                             gradLambdaAlpha[0];
-        forceTmpAlpha[1] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha)) *
+        forceTmpAlpha[1] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha), 0) *
                             gradLambdaAlpha[1];
-        forceTmpAlpha[2] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha)) *
+        forceTmpAlpha[2] += meanCompensationEnergy_.data(binAlpha, atomsType_(startAtomsAlpha), 0) *
                             gradLambdaAlpha[2];
     }
 
@@ -240,7 +240,7 @@ real_t LJ_IdealGas::run(data::Molecules& molecules, HalfVerletList& verletList, 
 
     isDriftCompensationSamplingRun_ = runCounter_ % compensationEnergySamplingInterval == 0;
 
-    compensationEnergyScatter_ = MultiScatterView(compensationEnergy_.data);
+    compensationEnergyScatter_ = MultiVectorScatterView(compensationEnergy_.data);
 
     real_t energy = 0_r;
     auto policy = Kokkos::RangePolicy<>(0, molecules.numLocalMolecules);

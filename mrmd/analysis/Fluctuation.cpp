@@ -22,7 +22,8 @@ namespace analysis
 {
 real_t getFluctuation(const data::MultiHistogram& hist,
                       const real_t& reference,
-                      const idx_t& specimen)
+                      const idx_t& specimen,
+                      const idx_t& dimId)
 {
     auto ret = 0_r;
     const real_t weighting = hist.binSize / (hist.max - hist.min);
@@ -31,7 +32,7 @@ real_t getFluctuation(const data::MultiHistogram& hist,
     auto policy = Kokkos::RangePolicy<>(0, hist.numBins);
     auto normalizeSampleKernel = KOKKOS_LAMBDA(const idx_t& idx, real_t& fluctuation)
     {
-        fluctuation += weighting * util::sqr((data(idx, specimen) - reference) / reference);
+        fluctuation += weighting * util::sqr((data(idx, specimen, dimId) - reference) / reference);
     };
     Kokkos::parallel_reduce("getFluctuation", policy, normalizeSampleKernel, ret);
     Kokkos::fence();

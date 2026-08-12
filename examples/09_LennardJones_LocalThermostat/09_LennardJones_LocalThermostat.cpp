@@ -210,7 +210,7 @@ void lennardJones_localThermostat(Config& config)
         AXIS::X);
 
     analysis::AxialAverageProfile velocityProfile(
-        subdomain, config.profileBinWidth, 1_r, atoms.getNumTypes(), AXIS::X);
+        subdomain, config.profileBinWidth, 1_r, atoms.getNumTypes(), AXIS::X, {AXIS::X, AXIS::Y, AXIS::Z});
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -293,7 +293,7 @@ void lennardJones_localThermostat(Config& config)
 
             temperatureProfile.sample(atoms, analysis::getAxialKineticEnergyProfile);
 
-            velocityProfile.sample(atoms, analysis::getAxialParallelTotalVelocityProfile);
+            velocityProfile.sample(atoms, analysis::getAxialTotalVelocityVectorProfile);
         }
 
         if (step > 0 && step % config.profileUpdateInterval == 0)

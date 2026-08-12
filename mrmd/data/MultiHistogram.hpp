@@ -66,6 +66,11 @@ struct MultiHistogram
         Kokkos::deep_copy(data, histogram.data);
     }
 
+    idx_t getNumDimensions() const
+    {
+        return numDimensions;
+    }
+
     /**
      * @param val input value
      * @return corresponding bin or -1 if outside of range

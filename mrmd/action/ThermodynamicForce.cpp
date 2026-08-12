@@ -93,7 +93,7 @@ std::vector<real_t> ThermodynamicForce::getMuLeft() const
     {
         for (size_t i = 0; i < Fth.extent(0) / 2; ++i)
         {
-            muLeft[typeId] += Fth(i, typeId);
+            muLeft[typeId] += Fth(i, typeId, 0);
         }
         muLeft[typeId] *= getForce().binSize;
     }
@@ -110,7 +110,7 @@ std::vector<real_t> ThermodynamicForce::getMuRight() const
     {
         for (size_t i = Fth.extent(0) / 2; i < Fth.extent(0); ++i)
         {
-            muLeft[typeId] += Fth(i, typeId);
+            muLeft[typeId] += Fth(i, typeId, 0);
         }
         muLeft[typeId] *= getForce().binSize;
     }

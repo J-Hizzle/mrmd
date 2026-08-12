@@ -159,8 +159,9 @@ using SingleScatterView = Kokkos::Experimental::ScatterView<real_t>;
 using ScalarView = Kokkos::View<real_t*>;
 using ScalarScatterView = Kokkos::Experimental::ScatterView<real_t*>;
 using MultiView = Kokkos::View<real_t**>;
-using MultiVectorView = Kokkos::View<real_t** [3]>;
+using MultiVectorView = Kokkos::View<real_t***>;
 using MultiScatterView = Kokkos::Experimental::ScatterView<real_t**>;
+using MultiVectorScatterView = Kokkos::Experimental::ScatterView<real_t***>;
 using VectorView = Kokkos::View<real_t* [3]>;
 using VectorScatterView = Kokkos::Experimental::ScatterView<real_t* [3]>;
 

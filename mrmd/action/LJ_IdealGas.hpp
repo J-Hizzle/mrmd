@@ -54,7 +54,7 @@ private:
     static constexpr idx_t COMPENSATION_ENERGY_BINS = 200;
 
     data::MultiHistogram compensationEnergy_;
-    MultiScatterView compensationEnergyScatter_;
+    MultiVectorScatterView compensationEnergyScatter_;
 
     data::MultiHistogram compensationEnergyCounter_;
 

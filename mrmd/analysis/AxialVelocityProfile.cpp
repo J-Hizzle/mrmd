@@ -27,21 +27,11 @@ namespace analysis
 //{
 //}
 
-data::MultiHistogram getAxialParallelTotalVelocityProfile(const data::Atoms& atoms,
-                                                          const real_t min,
-                                                          const real_t max,
-                                                          const idx_t numBins,
-                                                          const AXIS axis)
-{
-    return getAxialTotalVelocityProfile(atoms, min, max, numBins, axis, axis);
-}
-
-data::MultiHistogram getAxialTotalVelocityProfile(const data::Atoms& atoms,
+data::MultiHistogram getAxialTotalVelocityVectorProfile(const data::Atoms& atoms,
                                                   const real_t min,
                                                   const real_t max,
                                                   const idx_t numBins,
-                                                  const AXIS axis,
-                                                  const AXIS direction)
+                                                  const AXIS gridAxis)
 {
     MRMD_HOST_CHECK_GREATEREQUAL(max, min);
 
@@ -52,18 +42,18 @@ data::MultiHistogram getAxialTotalVelocityProfile(const data::Atoms& atoms,
     auto velocities = atoms.getVel();
     auto masses = atoms.getMass();
 
-    data::MultiHistogram histogram("velocity-profile", min, max, numBins, numTypes);
-    MultiScatterView scatter(histogram.data);
+    data::MultiHistogram histogram("velocity-profile", min, max, numBins, numTypes, DIMENSIONS);
+    MultiVectorScatterView scatter(histogram.data);
 
-    auto policy = Kokkos::RangePolicy<>(0, numAtoms);
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numAtoms, DIMENSIONS});
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t dimId)
     {
         MRMD_DEVICE_ASSERT_GREATEREQUAL(type(idx), 0);
         MRMD_DEVICE_ASSERT_LESS(type(idx), numTypes);
-        auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
+        auto bin = histogram.getBin(positions(idx, to_underlying(gridAxis)));
         if (bin == -1) return;
         auto access = scatter.access();
-        access(bin, type(idx)) += velocities(idx, to_underlying(direction));
+        access(bin, type(idx), dimId) += velocities(idx, dimId);
     };
     Kokkos::parallel_for(policy, kernel);
     Kokkos::Experimental::contribute(histogram.data, scatter);

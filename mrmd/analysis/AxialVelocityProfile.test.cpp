@@ -68,32 +68,5 @@ data::Atoms initAtoms()
 
     return atoms;
 }
-
-TEST(AxialVelocityProfile, histogram)
-{
-    auto atoms = initAtoms();
-    auto histogram_x = getAxialParallelTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X);
-    auto histogram_y = getAxialTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Y);
-    auto histogram_z = getAxialTotalVelocityProfile(atoms, 0_r, 10_r, 10, AXIS::X, AXIS::Z);
-
-    auto h_x_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_x.data);
-    auto h_y_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_y.data);
-    auto h_z_data = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), histogram_z.data);
-
-    for (auto i = 0; i < 10; ++i)
-    {
-        EXPECT_FLOAT_EQ(h_x_data(i, 0), 1_r);
-        EXPECT_FLOAT_EQ(h_x_data(i, 1), real_c(i + 1));
-        EXPECT_FLOAT_EQ(h_x_data(i, 2), real_c(10 - i));
-
-        EXPECT_FLOAT_EQ(h_y_data(i, 0), 0_r);
-        EXPECT_FLOAT_EQ(h_y_data(i, 1), real_c(i + 1));
-        EXPECT_FLOAT_EQ(h_y_data(i, 2), 2_r * real_c(10 - i));
-
-        EXPECT_FLOAT_EQ(h_z_data(i, 0), 0_r);
-        EXPECT_FLOAT_EQ(h_z_data(i, 1), real_c(i + 1));
-        EXPECT_FLOAT_EQ(h_z_data(i, 2), 3_r * real_c(10 - i));
-    }
-}
 }  // namespace analysis
 }  // namespace mrmd

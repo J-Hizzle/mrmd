@@ -43,13 +43,21 @@ private:
 
 public:
     inline auto getForce() const { return force_; }
+
     inline auto getForce(const idx_t& typeId) const
     {
         assert(typeId < numTypes_);
         assert(typeId >= 0);
-        return Kokkos::subview(force_.data, Kokkos::ALL(), typeId);
+        return Kokkos::subview(force_.data, Kokkos::ALL(), typeId, 0);
     }
-    inline void setForce(const MultiView& forces) const { Kokkos::deep_copy(force_.data, forces); }
+    inline void setForce(const MultiVectorView& forces) const 
+    { 
+        assert(forces.extent(0) == force_.numBins);
+        assert(forces.extent(1) == force_.numHistograms);
+        assert(forces.extent(2) == 1);
+
+        Kokkos::deep_copy(force_.data, forces); 
+    }
 
     void update(const data::MultiHistogram& densityProfile,
                 const real_t& smoothingSigma,
@@ -104,8 +112,8 @@ void ThermodynamicForce::apply_if(const data::Atoms& atoms, const Pred& pred) co
         if (bin != -1)
         {
             MRMD_DEVICE_ASSERT_LESS(atomsType(idx), forceHistogram.numHistograms);
-            MRMD_DEVICE_ASSERT(!std::isnan(forceHistogram.data(bin, atomsType(idx))));
-            atomsForce(idx, 0) += forceHistogram.data(bin, atomsType(idx));
+            MRMD_DEVICE_ASSERT(!std::isnan(forceHistogram.data(bin, atomsType(idx), 0)));
+            atomsForce(idx, 0) += forceHistogram.data(bin, atomsType(idx), 0);
         }
     };
     Kokkos::parallel_for("ThermodynamicForce::apply_if", policy, kernel);
@@ -190,8 +198,8 @@ void ThermodynamicForce::applyInterpolated_if(const data::Atoms& atoms, const Pr
             // interpolate if both neighbors are valid, otherwise clamp to the current bin
             if (leftBinIdx >= 0 && rightBinIdx < forceHistogram.numBins)
             {
-                auto inputLeft = forceHistogram.data(leftBinIdx, atomType);
-                auto inputRight = forceHistogram.data(rightBinIdx, atomType);
+                auto inputLeft = forceHistogram.data(leftBinIdx, atomType, 0);
+                auto inputRight = forceHistogram.data(rightBinIdx, atomType, 0);
                 MRMD_DEVICE_ASSERT(!std::isnan(inputLeft));
                 MRMD_DEVICE_ASSERT(!std::isnan(inputRight));
 
@@ -199,7 +207,7 @@ void ThermodynamicForce::applyInterpolated_if(const data::Atoms& atoms, const Pr
             }
             else
             {
-                auto input = forceHistogram.data(bin, atomType);
+                auto input = forceHistogram.data(bin, atomType, 0);
                 MRMD_DEVICE_ASSERT(!std::isnan(input));
                 atomsForce(idx, 0) += input;
             }

@@ -23,16 +23,19 @@ AxialAverageProfile::AxialAverageProfile(const data::Subdomain& subdomain,
                                          const real_t binWidth,
                                          const real_t normalizationFactor,
                                          const idx_t numTypes,
-                                         const AXIS& axis)
+                                         const AXIS& gridAxis,
+                                         const std::vector<AXIS>& dataAxes)
     : averageProfile_("average-profile",
-                      subdomain.minCorner[to_underlying(axis)],
-                      subdomain.maxCorner[to_underlying(axis)],
-                      idx_c(std::ceil(subdomain.diameter[to_underlying(axis)] / binWidth)),
-                      numTypes),
+                      subdomain.minCorner[to_underlying(gridAxis)],
+                      subdomain.maxCorner[to_underlying(gridAxis)],
+                      idx_c(std::ceil(subdomain.diameter[to_underlying(gridAxis)] / binWidth)),
+                      numTypes,
+                      dataAxes.size()),
       sampledProfile_("sampled-profile", averageProfile_),
       normalizationFactor_(normalizationFactor),
       numTypes_(numTypes),
-      axis_(axis)
+      gridAxis_(gridAxis),
+      dataAxes_(dataAxes)
 {
     MRMD_HOST_CHECK_FLOAT_EQUAL(
         averageProfile_.binSize, binWidth, "requested bin size is not achieved");

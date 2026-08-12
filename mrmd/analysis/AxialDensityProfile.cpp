@@ -34,7 +34,7 @@ data::MultiHistogram getAxialParticleNumberProfile(const data::Atoms& atoms,
 
     data::MultiHistogram histogram(
         "get-axial-particle-number-profile", min, max, numBins, numTypes);
-    MultiScatterView scatter(histogram.data);
+    MultiVectorScatterView scatter(histogram.data);
 
     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t idx)
@@ -44,7 +44,7 @@ data::MultiHistogram getAxialParticleNumberProfile(const data::Atoms& atoms,
         auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
         if (bin == -1) return;
         auto access = scatter.access();
-        access(bin, types(idx)) += 1_r;
+        access(bin, types(idx), 0) += 1_r;
     };
     Kokkos::parallel_for(policy, kernel);
     Kokkos::Experimental::contribute(histogram.data, scatter);

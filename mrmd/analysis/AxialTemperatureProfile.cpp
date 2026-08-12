@@ -36,7 +36,7 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
     auto masses = atoms.getMass();
 
     data::MultiHistogram histogram("kinetic-energy-profile", min, max, numBins, numTypes);
-    MultiScatterView scatter(histogram.data);
+    MultiVectorScatterView scatter(histogram.data);
 
     auto policy = Kokkos::RangePolicy<>(0, numAtoms);
     auto kernel = KOKKOS_LAMBDA(const idx_t idx)
@@ -46,7 +46,7 @@ data::MultiHistogram getAxialKineticEnergyProfile(const data::Atoms& atoms,
         auto bin = histogram.getBin(positions(idx, to_underlying(axis)));
         if (bin == -1) return;
         auto access = scatter.access();
-        access(bin, type(idx)) +=
+        access(bin, type(idx), 0) +=
             0.5_r * masses(idx) *
             (velocities(idx, 0) * velocities(idx, 0) + velocities(idx, 1) * velocities(idx, 1) +
              velocities(idx, 2) * velocities(idx, 2));

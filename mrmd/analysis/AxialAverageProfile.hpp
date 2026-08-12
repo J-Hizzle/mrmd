@@ -18,6 +18,7 @@
 #include <concepts>
 #include <type_traits>
 #include <vector>
+#include <algorithm>
 
 #include "data/Atoms.hpp"
 #include "data/MultiHistogram.hpp"
@@ -40,16 +41,24 @@ private:
     data::MultiHistogram averageProfile_;
     data::MultiHistogram sampledProfile_;
     idx_t numberOfSamples_ = 0;
-    real_t normalizationFactor_;
-    idx_t numTypes_;
-    AXIS axis_;
+    const real_t normalizationFactor_;
+    const idx_t numTypes_;
+    const AXIS gridAxis_;
+    const std::vector<AXIS> dataAxes_;
+
+    inline auto getDimensionIdentificatorFromAxis(const AXIS& dataAxis) const
+    {
+        auto iterator = std::find(dataAxes_.begin(), dataAxes_.end(), dataAxis);
+        assert(iterator != dataAxes_.end() && "data axis is not part of the data axes");
+        return idx_c(std::distance(dataAxes_.begin(), iterator));
+    }
 
 public:
     template <AxialProfileSampler Sampler>
     void sample(const data::Atoms& atoms, const Sampler& sampler)
     {
         sampledProfile_ += sampler(
-            atoms, averageProfile_.min, averageProfile_.max, averageProfile_.numBins, axis_);
+            atoms, averageProfile_.min, averageProfile_.max, averageProfile_.numBins, gridAxis_);
 
         numberOfSamples_++;
     }
@@ -63,7 +72,18 @@ public:
     {
         assert(typeId < numTypes_);
         assert(typeId >= 0);
-        return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId);
+        assert(dataAxes_.size() == 1);
+        return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId, 0);
+    }
+
+    inline auto getAverageProfile(const idx_t& typeId, const AXIS& dataAxis) const
+    {
+        assert(typeId < numTypes_);
+        assert(typeId >= 0);
+
+        auto dimId = getDimensionIdentificatorFromAxis(dataAxis);
+
+        return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId, dimId);
     }
 
     inline auto getSampledProfile() const
@@ -77,17 +97,39 @@ public:
     {
         assert(typeId < numTypes_);
         assert(typeId >= 0);
+        assert(dataAxes_.size() == 1);
 
         data::MultiHistogram histogram("histogram", sampledProfile_);
         histogram.scale(1_r / real_c(numberOfSamples_));
-        return Kokkos::subview(histogram.data, Kokkos::ALL(), typeId);
+        return Kokkos::subview(averageProfile_.data, Kokkos::ALL(), typeId, 0);
+    }
+
+    inline auto getSampledProfile(const idx_t& typeId, const AXIS& dataAxis) const
+    {
+        assert(typeId < numTypes_);
+        assert(typeId >= 0);
+
+        data::MultiHistogram histogram("histogram", sampledProfile_);
+        histogram.scale(1_r / real_c(numberOfSamples_));
+        auto dimId = getDimensionIdentificatorFromAxis(dataAxis);
+        return Kokkos::subview(histogram.data, Kokkos::ALL(), typeId, dimId);
     }
 
     AxialAverageProfile(const data::Subdomain& subdomain,
                         const real_t binWidth,
                         const real_t normalizationFactor,
                         const idx_t numTypes,
-                        const AXIS& axis);
+                        const AXIS& gridAxis)
+        : AxialAverageProfile(subdomain, binWidth, normalizationFactor, numTypes, gridAxis, {gridAxis})
+    {
+    }
+
+    AxialAverageProfile(const data::Subdomain& subdomain,
+                        const real_t binWidth,
+                        const real_t normalizationFactor,
+                        const idx_t numTypes,
+                        const AXIS& gridAxis,
+                        const std::vector<AXIS>& dataAxes);
 };
 }  // namespace analysis
 }  // namespace mrmd

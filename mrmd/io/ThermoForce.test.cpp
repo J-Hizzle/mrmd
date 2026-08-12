@@ -33,12 +33,12 @@ action::ThermodynamicForce createThermoForce(const idx_t& numBins,
     action::ThermodynamicForce thermodynamicForce(
         targetDensities, subdomain, binWidth, forceModulations);
 
-    MultiView forces("thermoForce", numBins, numForces);
+    MultiVectorView forces("thermoForce", numBins, numForces, 1);
 
     auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numBins, numForces});
     auto kernel = KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx)
     {
-        forces(idx, jdx) = 1_r * (real_c(idx) + 1) * (real_c(jdx) + 1);
+        forces(idx, jdx, 0) = 1_r * (real_c(idx) + 1) * (real_c(jdx) + 1);
     };
     Kokkos::parallel_for("createThermoForce", policy, kernel);
     Kokkos::fence();
@@ -107,7 +107,7 @@ TEST(ThermoForce, dumpMultipleForces)
         EXPECT_FLOAT_EQ(grid1(binNum), grid2(binNum));
         for (idx_t forceNum = 0; forceNum < numForces; forceNum++)
         {
-            EXPECT_FLOAT_EQ(thermoForce1(binNum, forceNum), thermoForce2(binNum, forceNum));
+            EXPECT_FLOAT_EQ(thermoForce1(binNum, forceNum, 0), thermoForce2(binNum, forceNum, 0));
         }
     }
 }

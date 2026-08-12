@@ -69,9 +69,9 @@ TEST(AxialDensityProfile, histogram)
 
     for (auto i = 0; i < 10; ++i)
     {
-        EXPECT_FLOAT_EQ(h_data(i, 0), real_c(1));
-        EXPECT_FLOAT_EQ(h_data(i, 1), real_c(i + 1));
-        EXPECT_FLOAT_EQ(h_data(i, 2), real_c(11 - (i + 1)));
+        EXPECT_FLOAT_EQ(h_data(i, 0, 0), real_c(1));
+        EXPECT_FLOAT_EQ(h_data(i, 1, 0), real_c(i + 1));
+        EXPECT_FLOAT_EQ(h_data(i, 2, 0), real_c(11 - (i + 1)));
     }
 }
 
