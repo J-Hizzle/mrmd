@@ -199,17 +199,11 @@ data::MultiHistogram smoothen(const data::MultiHistogram& input,
             const auto eFunc =
                 Kokkos::exp(-util::sqr(real_c(binIdx - jdx) * input.binSize * inverseSigma));
             normalization += eFunc;
-            for (idx_t dimIdx = 0; dimIdx < input.numDimensions; ++dimIdx)
-            {
-                smoothenedDensityProfile.data(binIdx, histogramIdx, dimIdx) +=
-                    input.data(possiblyMappedIdx, histogramIdx, dimIdx) * eFunc;
-            }
+            smoothenedDensityProfile.data(binIdx, histogramIdx, dimIdx) +=
+                input.data(possiblyMappedIdx, histogramIdx, dimIdx) * eFunc;
         }
 
-        for (idx_t dimIdx = 0; dimIdx < input.numDimensions; ++dimIdx)
-        {
-            smoothenedDensityProfile.data(binIdx, histogramIdx, dimIdx) /= normalization;
-        }
+        smoothenedDensityProfile.data(binIdx, histogramIdx, dimIdx) /= normalization;
     };
     Kokkos::parallel_for("MultiHistogram::smoothen", policy, kernel);
     Kokkos::fence();
