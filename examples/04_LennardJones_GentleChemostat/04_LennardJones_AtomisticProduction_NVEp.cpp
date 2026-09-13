@@ -17,18 +17,10 @@
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
 #include <Kokkos_Core.hpp>
-#include <algorithm>
 #include <format>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 
-#include "Cabana_NeighborList.hpp"
 #include "action/LennardJones.hpp"
-#include "action/LimitAcceleration.hpp"
-#include "action/LimitVelocity.hpp"
-#include "action/ThermodynamicForce.hpp"
-#include "action/VelocityVerletLangevinThermostat.hpp"
+#include "action/VelocityVerlet.hpp"
 #include "analysis/CountingPlane.hpp"
 #include "analysis/KineticEnergy.hpp"
 #include "analysis/MeanSquareDisplacement.hpp"
@@ -40,21 +32,14 @@
 #include "datatypes.hpp"
 #include "io/DumpGRO.hpp"
 #include "io/DumpH5MD.hpp"
-#include "io/DumpProfile.hpp"
-#include "io/DumpThermoForce.hpp"
 #include "io/RestoreH5MD.hpp"
-#include "io/RestoreThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricInterval.hpp"
+#include "util/ExponentialMovingAverage.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
-#include "util/simulationSetup.hpp"
 
 using namespace mrmd;
 
-/**
- * Configuration for the Argon NVE example simulation.
- */
 struct Config
 {
     // simulation time parameters
@@ -62,8 +47,7 @@ struct Config
     real_t dt = 0.002;        ///< time step size in reduced units
 
     // input file parameters
-    std::string fileRestoreH5MD = "thermodynamicForce_final.h5md";
-    std::string fileRestoreTF;
+    std::string fileRestoreH5MD = "equilibrateLangevin_final.h5md";
 
     // interaction parameters
     static constexpr real_t sigma =
@@ -73,7 +57,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.82417464_r * sigma;      ///< capping radius for LJ potential
+    real_t r_cap = 0_r;                             ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
@@ -83,54 +67,48 @@ struct Config
     static constexpr idx_t estimatedMaxNeighbors =
         60;  ///< estimated maximum number of neighbors per atom
 
-    // thermostat parameters
-    real_t target_temperature =
-        1.5_r;  ///< target temperature during equilibration for thermostat in reduced units
-    real_t gamma = 0.04_r / dt;  ///< friction coefficient for Langevin thermostat
-
-    // application regions
-    real_t innerIntRegionMin = 0_r;
-    real_t innerIntRegionMax = 10_r * sigma + r_cut;
-    real_t thermostatRegionMin = innerIntRegionMax;
-    real_t thermostatRegionMax = 15_r * sigma;
-    real_t thermoForceRegionMin = innerIntRegionMax;
-    real_t thermoForceRegionMax = 14.5_r * sigma;
-
     // output parameters
     bool bOutput = true;                  ///< whether to output data files
     idx_t outputInterval = -1;            ///< interval for data file output (-1: no output)
     const std::string resName = "Argon";  ///< residue name for output files
     const std::vector<std::string> typeNames = {"Ar"};  ///< atom type names for output files
 
-    std::string fileOut = "tracerProduction";  ///< base name for output files
+    std::string fileOut = "atomisticProduction";  ///< base name for output files
     std::string fileOutH5MD = format("{0}.h5md", fileOut);
     std::string fileOutFinalGro = format("{0}_final.gro", fileOut);
     std::string fileOutFinalH5MD = format("{0}_final.h5md", fileOut);
 };
 
-void runTracerProduction(Config& config)
+void constrainCenterOfMassMomentum(data::Atoms& atoms)
+{
+    auto systemMomentum = analysis::getSystemMomentum(atoms);
+    for (int d = 0; d < DIMENSIONS; ++d)
+    {
+        systemMomentum[d] /= real_c(atoms.numLocalAtoms);
+    }
+    auto vel = atoms.getVel();
+    auto policy = Kokkos::RangePolicy(0, atoms.numLocalAtoms);
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx) {
+        vel(idx, 0) -= systemMomentum[0];
+        vel(idx, 1) -= systemMomentum[1];
+        vel(idx, 2) -= systemMomentum[2];
+    };
+    Kokkos::parallel_for(
+        "constrainCOMMomentum",
+        policy,
+        kernel);
+    Kokkos::fence();
+}
+
+void runAtomisticProduction(Config& config)
 {
     // initialize
-    data::Subdomain initialSubdomain;
+    data::Subdomain subdomain;
     auto atoms = data::Atoms(0);
 
     // load data from file
     auto io = io::RestoreH5MD();
-    io.restore(config.fileRestoreH5MD, initialSubdomain, atoms);
-
-    // reinitialize subdomain with no ghost layer in x-direction
-    data::Subdomain subdomain(
-        {
-            initialSubdomain.minCorner[0],
-            initialSubdomain.minCorner[1],
-            initialSubdomain.minCorner[2],
-        },
-        {
-            initialSubdomain.maxCorner[0],
-            initialSubdomain.maxCorner[1],
-            initialSubdomain.maxCorner[2],
-        },
-        {0_r, initialSubdomain.ghostLayerThickness[1], initialSubdomain.ghostLayerThickness[1]});
+    io.restore(config.fileRestoreH5MD, subdomain, atoms);
 
     // calculate volume of the simulation domain
     const auto volume = subdomain.getVolume();
@@ -138,12 +116,6 @@ void runTracerProduction(Config& config)
     // calculate and print initial density
     auto rho = real_c(atoms.numLocalAtoms) / volume;
     std::cout << "rho: " << rho << std::endl;
-
-    // restore thermodynamic force from file
-    std::cout << "restoring thermodynamic force from file" << std::endl;
-
-    auto thermodynamicForce =
-        io::restoreThermoForce(config.fileRestoreTF, subdomain, {rho}, {0_r}, true, false, 1);
 
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
@@ -154,8 +126,7 @@ void runTracerProduction(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJonesInner(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap_inner);
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -163,21 +134,6 @@ void runTracerProduction(Config& config)
     std::cout << "x center: " << boxCenter[0] << std::endl;
     std::cout << "y center: " << boxCenter[1] << std::endl;
     std::cout << "z center: " << boxCenter[2] << std::endl;
-
-    // set up different regions
-    util::IsInSymmetricSlab isInInnerIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                               config.innerIntRegionMin,
-                                               config.innerIntRegionMax);
-    util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                                 config.thermostatRegionMin,
-                                                 config.thermostatRegionMax);
-    util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                                  config.thermoForceRegionMin,
-                                                  config.thermoForceRegionMax);
-
-    // set up thermostat for temperature control
-    action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
-                                                                config.target_temperature);
 
     // set up timer for runtime measurement
     Kokkos::Timer timer;
@@ -188,9 +144,8 @@ void runTracerProduction(Config& config)
     auto msd = 0_r;
 
     // set up variables for counting particle flux across the domain
-    analysis::CountingPlane countingPlane(
-        {boxCenter[0] + (config.innerIntRegionMax - config.r_cut), boxCenter[1], boxCenter[2]},
-        {1_r, 0_r, 0_r});
+    analysis::CountingPlane countingPlane({boxCenter[0] + (10_r), boxCenter[1], boxCenter[2]},
+                                          {1_r, 0_r, 0_r});
     int64_t flux = 0;
 
     // output management
@@ -215,28 +170,20 @@ void runTracerProduction(Config& config)
         countingPlane.startCounting(atoms);
 
         // integrate equations of motion with local Langevin thermostat during production phase
-        maxAtomDisplacement +=
-            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
+        maxAtomDisplacement += action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
 
         // stop counting particle flux across the plane and calculate flux
         flux += countingPlane.stopCounting(atoms);
 
-        // check if neighbor list needs to be rebuilt
-        if (maxAtomDisplacement >=
-            config.skin *
-                0.5_r)  // the condition is on half the skin thickness because in principle two
-                        // atoms may both move half the skin thickness towards each other
+        if (maxAtomDisplacement >= config.skin * 0.5_r)
         {
             // reset displacement
             maxAtomDisplacement = 0_r;
 
-            // reinsert atoms that left the domain according to periodic boundary conditions
             ghostLayer.exchangeRealAtoms(atoms, subdomain);
 
-            // create ghost atoms in the ghost layer beyond the periodic boundaries
             ghostLayer.createGhostAtoms(atoms, subdomain);
 
-            // rebuild neighbor list
             verletList.build(atoms.getPos(),
                              0,
                              atoms.numLocalAtoms,
@@ -249,8 +196,6 @@ void runTracerProduction(Config& config)
         }
         else
         {
-            // update ghost atom positions in the ghost layer according to periodic boundary
-            // conditions
             ghostLayer.updateGhostAtoms(atoms, subdomain);
         }
 
@@ -259,31 +204,24 @@ void runTracerProduction(Config& config)
         Cabana::deep_copy(force, 0_r);
 
         // compute and apply forces
-        thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
-
-        lennardJonesInner.apply_if(
-            atoms,
-            verletList,
-            KOKKOS_LAMBDA(const real_t x1,
-                          const real_t y1,
-                          const real_t z1,
-                          const real_t x2,
-                          const real_t y2,
-                          const real_t z2) {
-                return (isInInnerIntRegion(x1, y1, z1) && isInInnerIntRegion(x2, y2, z2));
-            });
+        lennardJones.apply(atoms, verletList);
 
         // contribute forces calculated on ghost atoms back to real atoms
         ghostLayer.contributeBackGhostToReal(atoms);
 
         // integrate equations of motion after force calculation
-        langevinIntegrator.postForceIntegrate(atoms, config.dt);
+        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+
+        // constrain the center of mass momentum to zero
+        auto systemMomentum = analysis::getSystemMomentum(atoms);
+
+        constrainCenterOfMassMomentum(atoms);
 
         // handle output and statistics
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJonesInner.getEnergy()) / real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJones.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -307,22 +245,22 @@ void runTracerProduction(Config& config)
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
-                  << E0 + Ek << " " << p << " " << msd << " " << flux << " "
-
-                  << atoms.numLocalAtoms << " " << atoms.numGhostAtoms << " " << std::endl;
-
+                  << E0 + Ek << " " << p << " " << msd << " " << flux << " " << atoms.numLocalAtoms
+                  << " " << atoms.numGhostAtoms << " " << std::endl;
+            
             // reset flux counter
             flux = 0;
-
+            
             // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }
     }
+
     if (config.bOutput)
     {
         dumpH5MD.close();
 
-        // final phase point output
+        // final microstates output
         dumpH5MD.dump(config.fileOutFinalH5MD, subdomain, atoms);
 
         // close statistics file
@@ -349,15 +287,12 @@ void runTracerProduction(Config& config)
     fout.close();
 }
 
-int main(int argc, char* argv[])  // NOLINT
+int main(int argc, char* argv[])
 {
-    // initialize
     Kokkos::initialize(argc, argv);
 
-    // print Kokkos execution space
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
 
-    // initialize simulation configuration with command line interface
     Config config;
     CLI::App app{"Lennard Jones Fluid benchmark application"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
@@ -366,27 +301,7 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("-i,--inpfile", config.fileRestoreH5MD, "input file name");
     app.add_option("-f,--outfile", config.fileOut, "output file name");
 
-    app.add_option("--temp", config.target_temperature, "target temperature");
-    app.add_option("--friction", config.gamma, "friction coefficient for langevin thermostat");
-
-    app.add_option("--forceinp", config.fileRestoreTF, "input file for the thermodynamics force");
-    app.add_option(
-        "--rcap", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
-
-    app.add_option(
-        "--intmin", config.innerIntRegionMin, "interacting region minimum coordinate");
-    app.add_option(
-        "--intmax", config.innerIntRegionMax, "interacting region maximum coordinate");
-    app.add_option(
-        "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
-    app.add_option(
-        "--thermostatmax", config.thermostatRegionMax, "thermostat region maximum coordinate");
-    app.add_option("--thermoforcemin",
-                   config.thermoForceRegionMin,
-                   "thermodynamic force region minimum coordinate");
-    app.add_option("--thermoforcemax",
-                   config.thermoForceRegionMax,
-                   "thermodynamic force region maximum coordinate");
+    app.add_option("--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -395,11 +310,8 @@ int main(int argc, char* argv[])  // NOLINT
     config.fileOutFinalH5MD = format("{0}_final.h5md", config.fileOut);
 
     if (config.outputInterval < 0) config.bOutput = false;
+    runAtomisticProduction(config);
 
-    // set up run simulation
-    runTracerProduction(config);
-
-    // finalize
     Kokkos::finalize();
 
     return EXIT_SUCCESS;

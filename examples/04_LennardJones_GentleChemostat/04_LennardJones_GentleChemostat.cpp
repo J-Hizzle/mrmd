@@ -71,8 +71,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap_inner = 0.0_r * sigma;             ///< capping radius for LJ potential
-    real_t r_cap_outer = 0.7_r * sigma;
+    real_t r_cap = 0.82417464_r * sigma; ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
@@ -100,13 +99,11 @@ struct Config
     const bool enforceSymmetry = true;
 
     // application regions
-    real_t innerIntRegionMin = 0_r;
-    real_t innerIntRegionMax = 10_r * sigma;
-    real_t outerIntRegionMin = innerIntRegionMax;
-    real_t outerIntRegionMax = outerIntRegionMin + r_cut;
-    real_t thermostatRegionMin = innerIntRegionMax;
+    real_t intRegionMin = 0_r;
+    real_t intRegionMax = 12.5_r * sigma;
+    real_t thermostatRegionMin = 10_r * sigma;
     real_t thermostatRegionMax = 15_r * sigma;
-    real_t thermoForceRegionMin = innerIntRegionMax;
+    real_t thermoForceRegionMin = 10_r * sigma;
     real_t thermoForceRegionMax = 14.5_r * sigma;
 
     // output parameters
@@ -164,10 +161,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJonesInner(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap_inner);
-    action::LennardJones lennardJonesOuter(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap_outer);
+    action::LennardJones lennardJones(
+        config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -177,12 +172,9 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different regions
-    util::IsInSymmetricSlab isInInnerIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                               config.innerIntRegionMin,
-                                               config.innerIntRegionMax);
-    util::IsInSymmetricSlab isInOuterIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                               config.outerIntRegionMin,
-                                               config.outerIntRegionMax);
+    util::IsInSymmetricSlab isInIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
+                                               config.intRegionMin,
+                                               config.intRegionMax);
     util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                  config.thermostatRegionMin,
                                                  config.thermostatRegionMax);
@@ -310,10 +302,10 @@ void runLennardJones_idealGas_localCap(Config& config)
                 config.smoothingInverseDamping, config.smoothingRange, isInThermoForceUpdateRegion);
         }
 
-        thermodynamicForce.apply_if(atoms, isInThermoForceRegion);
+        thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
 
         // compute and apply forces
-        lennardJonesInner.apply_if(
+        lennardJones.apply_if(
             atoms,
             verletList,
             KOKKOS_LAMBDA(const real_t x1,
@@ -322,18 +314,7 @@ void runLennardJones_idealGas_localCap(Config& config)
                           const real_t x2,
                           const real_t y2,
                           const real_t z2) {
-                return (isInInnerIntRegion(x1, y1, z1) || isInInnerIntRegion(x2, y2, z2));
-            });
-        lennardJonesOuter.apply_if(
-            atoms,
-            verletList,
-            KOKKOS_LAMBDA(const real_t x1,
-                          const real_t y1,
-                          const real_t z1,
-                          const real_t x2,
-                          const real_t y2,
-                          const real_t z2) {
-                return isInOuterIntRegion(x1, y1, z1) && isInOuterIntRegion(x2, y2, z2);
+                return (isInIntRegion(x1, y1, z1) && isInIntRegion(x2, y2, z2));
             });
 
         // contribute forces calculated on ghost atoms back to real atoms
@@ -346,7 +327,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJonesInner.getEnergy() + lennardJonesOuter.getEnergy()) /
+            auto E0 = (lennardJones.getEnergy()) /
                       real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
@@ -447,18 +428,12 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option(
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
     app.add_option(
-        "--rcapinner", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
-    app.add_option(
-        "--rcapouter", config.r_cap_outer, "capping radius for outer Lennard-Jones potential");
+        "--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
 
     app.add_option(
-        "--innermin", config.innerIntRegionMin, "inner interacting region minimum coordinate");
+        "--intmin", config.intRegionMin, "interacting region minimum coordinate");
     app.add_option(
-        "--innermax", config.innerIntRegionMax, "inner interacting region maximum coordinate");
-    app.add_option(
-        "--outermin", config.outerIntRegionMin, "outer interacting region minimum coordinate");
-    app.add_option(
-        "--outermax", config.outerIntRegionMax, "outer interacting region maximum coordinate");
+        "--intmax", config.intRegionMax, "interacting region maximum coordinate");
     app.add_option(
         "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
     app.add_option(
