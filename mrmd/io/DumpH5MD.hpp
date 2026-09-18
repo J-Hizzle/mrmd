@@ -1,4 +1,5 @@
 // Copyright 2024 Sebastian Eibl
+// Copyright 2026 Julian Friedrich Hille
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,13 +22,21 @@
 
 namespace mrmd::io
 {
+namespace impl
+{
+class DumpH5MDImpl;
+}
+
 class DumpH5MD
 {
 public:
-    DumpH5MD(const std::string& authorArg, const std::string& particleGroupNameArg = "atoms")
-        : author(authorArg), particleGroupName(particleGroupNameArg)
-    {
-    }
+    DumpH5MD(const std::string& authorArg, const std::string& particleGroupNameArg = "atoms");
+
+    DumpH5MD(const DumpH5MD&) = delete;
+    DumpH5MD& operator=(const DumpH5MD&) = delete;
+    DumpH5MD(DumpH5MD&&) = delete;
+    DumpH5MD& operator=(DumpH5MD&&) = delete;
+
     void open(const std::string& filename,
               const data::Subdomain& subdomain,
               const data::Atoms& atoms);
@@ -62,44 +71,35 @@ public:
     std::string author = "xxx";
     std::string particleGroupName = "atoms";
 
-    int64_t fileId;
-    int64_t particleGroupId;
-    int64_t particleSubGroupId;
-    int64_t boxGroupId;
-    int64_t edgesGroupId;
-    int64_t edgesStepSetId;
-    int64_t edgesTimeSetId;
-    int64_t edgesValueSetId;
-    int64_t chargesGroupId;
-    int64_t chargesStepSetId;
-    int64_t chargesTimeSetId;
-    int64_t chargesValueSetId;
-    int64_t forceGroupId;
-    int64_t forceStepSetId;
-    int64_t forceTimeSetId;
-    int64_t forceValueSetId;
-    int64_t massGroupId;
-    int64_t massStepSetId;
-    int64_t massTimeSetId;
-    int64_t massValueSetId;
-    int64_t posGroupId;
-    int64_t posStepSetId;
-    int64_t posTimeSetId;
-    int64_t posValueSetId;
-    int64_t relativeMassGroupId;
-    int64_t relativeMassStepSetId;
-    int64_t relativeMassTimeSetId;
-    int64_t relativeMassValueSetId;
-    int64_t typeGroupId;
-    int64_t typeStepSetId;
-    int64_t typeTimeSetId;
-    int64_t typeValueSetId;
-    int64_t velGroupId;
-    int64_t velStepSetId;
-    int64_t velTimeSetId;
-    int64_t velValueSetId;
+private:
+    friend class impl::DumpH5MDImpl;
 
-    uint64_t saveCount = 0;
+    struct ElementHandles
+    {
+        int64_t group = -1;
+        int64_t step = -1;
+        int64_t time = -1;
+        int64_t value = -1;
+    };
+
+    struct State
+    {
+        int64_t fileId = -1;
+        int64_t particleGroupId = -1;
+        int64_t particleSubGroupId = -1;
+        int64_t boxGroupId = -1;
+        ElementHandles edges;
+        ElementHandles charges;
+        ElementHandles force;
+        ElementHandles mass;
+        ElementHandles pos;
+        ElementHandles relativeMass;
+        ElementHandles type;
+        ElementHandles vel;
+        uint64_t saveCount = 0;
+    };
+
+    State state_;
 };
 
 }  // namespace mrmd::io

@@ -17,7 +17,7 @@
 #include <CLI/Config.hpp>
 #include <CLI/Formatter.hpp>
 
-#include "action/VelocityVerlet.hpp"
+#include "action/VelocityVerletLangevinThermostat.hpp"
 #include "communication/GhostLayer.hpp"
 #include "data/Atoms.hpp"
 #include "data/Subdomain.hpp"
@@ -32,8 +32,14 @@ using namespace mrmd;
  */
 struct Config
 {
-    idx_t nsteps = 2001;  ///< number of steps to simulate
-    real_t dt = 0.005;    ///< time step size in reduced units
+    idx_t nsteps = 2001;                 ///< number of steps to simulate
+    static constexpr real_t dt = 0.005;  ///< time step size in reduced units
+
+    // thermostat parameters
+    static constexpr real_t temperature =
+        1.5_r;  ///< target temperature for thermostat in reduced units
+    static constexpr real_t friction =
+        0.04_r / dt;  ///< friction coefficient for Langevin thermostat
 };
 
 void runIdealGas(const Config& config)
@@ -47,6 +53,9 @@ void runIdealGas(const Config& config)
     // set up ghost layer for periodic boundary conditions
     communication::GhostLayer ghostLayer;
 
+    // set up thermostat for temperature control
+    action::VelocityVerletLangevinThermostat integrator(config.friction, config.temperature);
+
     // set up timer for runtime measurement
     Kokkos::Timer timer;
 
@@ -54,13 +63,13 @@ void runIdealGas(const Config& config)
     for (auto i = 0; i < config.nsteps; ++i)
     {
         // integrate equations of motion before (potentially) calculating forces
-        action::VelocityVerlet::preForceIntegrate(atoms, config.dt);
+        integrator.preForceIntegrate(atoms, config.dt);
 
         // reinsert atoms that left the domain according to periodic boundary conditions
         ghostLayer.exchangeRealAtoms(atoms, subdomain);
 
         // finish integrating equations of motion
-        action::VelocityVerlet::postForceIntegrate(atoms, config.dt);
+        integrator.postForceIntegrate(atoms, config.dt);
 
         // handle output
         if (i % 100 == 0)
