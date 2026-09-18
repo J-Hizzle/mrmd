@@ -88,15 +88,13 @@ void constrainCenterOfMassMomentum(data::Atoms& atoms)
     }
     auto vel = atoms.getVel();
     auto policy = Kokkos::RangePolicy(0, atoms.numLocalAtoms);
-    auto kernel = KOKKOS_LAMBDA(const idx_t idx) {
+    auto kernel = KOKKOS_LAMBDA(const idx_t idx)
+    {
         vel(idx, 0) -= systemMomentum[0];
         vel(idx, 1) -= systemMomentum[1];
         vel(idx, 2) -= systemMomentum[2];
     };
-    Kokkos::parallel_for(
-        "constrainCOMMomentum",
-        policy,
-        kernel);
+    Kokkos::parallel_for("constrainCOMMomentum", policy, kernel);
     Kokkos::fence();
 }
 
@@ -247,10 +245,10 @@ void runAtomisticProduction(Config& config)
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
                   << E0 + Ek << " " << p << " " << msd << " " << flux << " " << atoms.numLocalAtoms
                   << " " << atoms.numGhostAtoms << " " << std::endl;
-            
+
             // reset flux counter
             flux = 0;
-            
+
             // phase point output
             dumpH5MD.dumpStep(subdomain, atoms, step, config.dt);
         }

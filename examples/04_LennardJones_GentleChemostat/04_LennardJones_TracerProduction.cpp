@@ -372,10 +372,8 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option(
         "--rcap", config.r_cap_inner, "capping radius for inner Lennard-Jones potential");
 
-    app.add_option(
-        "--intmin", config.innerIntRegionMin, "interacting region minimum coordinate");
-    app.add_option(
-        "--intmax", config.innerIntRegionMax, "interacting region maximum coordinate");
+    app.add_option("--intmin", config.innerIntRegionMin, "interacting region minimum coordinate");
+    app.add_option("--intmax", config.innerIntRegionMax, "interacting region maximum coordinate");
     app.add_option(
         "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
     app.add_option(

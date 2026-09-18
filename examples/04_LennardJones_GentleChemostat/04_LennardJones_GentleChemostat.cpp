@@ -70,7 +70,7 @@ struct Config
     static constexpr real_t maxVelocity =
         1_r;  ///< maximum initial velocity component in reduced units
     static constexpr real_t r_cut = 2.5_r * sigma;  ///< cutoff radius for LJ potential
-    real_t r_cap = 0.82417464_r * sigma; ///< capping radius for LJ potential
+    real_t r_cap = 0.82417464_r * sigma;            ///< capping radius for LJ potential
 
     // neighbor list parameters
     static constexpr real_t skin = 0.3_r * sigma;           ///< skin thickness for neighbor list
@@ -159,8 +159,7 @@ void runLennardJones_idealGas_localCap(Config& config)
     idx_t rebuildCounter = 0;
 
     // set up interaction potential and force calculation and application
-    action::LennardJones lennardJones(
-        config.r_cut, config.sigma, config.epsilon, config.r_cap);
+    action::LennardJones lennardJones(config.r_cut, config.sigma, config.epsilon, config.r_cap);
 
     // calculate and print box center coordinates
     const auto boxCenter = subdomain.getCenter();
@@ -170,9 +169,8 @@ void runLennardJones_idealGas_localCap(Config& config)
     std::cout << "z center: " << boxCenter[2] << std::endl;
 
     // set up different regions
-    util::IsInSymmetricSlab isInIntRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
-                                               config.intRegionMin,
-                                               config.intRegionMax);
+    util::IsInSymmetricSlab isInIntRegion(
+        {boxCenter[0], boxCenter[1], boxCenter[2]}, config.intRegionMin, config.intRegionMax);
     util::IsInSymmetricSlab isInThermostatRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                  config.thermostatRegionMin,
                                                  config.thermostatRegionMax);
@@ -324,8 +322,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (config.bOutput && (step % config.outputInterval == 0))
         {
             // calculate statistics
-            auto E0 = (lennardJones.getEnergy()) /
-                      real_c(atoms.numLocalAtoms);
+            auto E0 = (lennardJones.getEnergy()) / real_c(atoms.numLocalAtoms);
             auto Ek = analysis::getMeanKineticEnergy(atoms);
             auto systemMomentum = analysis::getSystemMomentum(atoms);
             auto T = (2_r / 3_r) * Ek;
@@ -423,13 +420,10 @@ int main(int argc, char* argv[])  // NOLINT
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");
     app.add_option(
         "--forcemod", config.thermodynamicForceModulation, "thermodynamic force modulation");
-    app.add_option(
-        "--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
+    app.add_option("--rcap", config.r_cap, "capping radius for Lennard-Jones potential");
 
-    app.add_option(
-        "--intmin", config.intRegionMin, "interacting region minimum coordinate");
-    app.add_option(
-        "--intmax", config.intRegionMax, "interacting region maximum coordinate");
+    app.add_option("--intmin", config.intRegionMin, "interacting region minimum coordinate");
+    app.add_option("--intmax", config.intRegionMax, "interacting region maximum coordinate");
     app.add_option(
         "--thermostatmin", config.thermostatRegionMin, "thermostat region minimum coordinate");
     app.add_option(
