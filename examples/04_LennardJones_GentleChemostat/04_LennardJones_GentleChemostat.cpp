@@ -396,7 +396,7 @@ void runLennardJones_idealGas_localCap(Config& config)
 int main(int argc, char* argv[])  // NOLINT
 {
     // initialize
-    initialize(argc, argv);
+    Kokkos::initialize(argc, argv);
 
     // print Kokkos execution space
     std::cout << "execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << std::endl;
@@ -453,7 +453,7 @@ int main(int argc, char* argv[])  // NOLINT
     runLennardJones_idealGas_localCap(config);
 
     // finalize
-    finalize();
+    Kokkos::finalize();
 
     return EXIT_SUCCESS;
 }
