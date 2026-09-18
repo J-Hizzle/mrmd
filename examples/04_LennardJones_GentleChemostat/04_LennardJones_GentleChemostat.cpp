@@ -44,7 +44,6 @@
 #include "io/DumpThermoForce.hpp"
 #include "io/RestoreH5MD.hpp"
 #include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricInterval.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"
@@ -90,7 +89,6 @@ struct Config
     idx_t densitySamplingInterval = 200;
     idx_t densityUpdateInterval = 10000;
     real_t densityBinWidth = 0.2_r * sigma;
-    real_t forceBinWidth = densityBinWidth;
     real_t smoothingDamping = 1_r;
     real_t smoothingInverseDamping = 1_r / smoothingDamping;
     idx_t smoothingNeighbors = 0;
@@ -180,9 +178,9 @@ void runLennardJones_idealGas_localCap(Config& config)
                                                  config.thermostatRegionMax);
     util::IsInSymmetricSlab isInThermoForceRegion({boxCenter[0], boxCenter[1], boxCenter[2]},
                                                   config.thermoForceRegionMin,
-                                                  config.thermoForceRegionMax);
-    util::IsInSymmetricInterval isInThermoForceUpdateRegion(
-        boxCenter[0], config.thermoForceRegionMin, config.thermoForceRegionMax);
+                                                  config.thermoForceRegionMax,
+                                                  AXIS::X,
+                                                  -std::numeric_limits<real_t>::epsilon());
 
     // set up thermostat for temperature control during equilibration
     action::VelocityVerletLangevinThermostat langevinIntegrator(config.gamma,
@@ -192,7 +190,6 @@ void runLennardJones_idealGas_localCap(Config& config)
     action::ThermodynamicForce thermodynamicForce({rho},
                                                   subdomain,
                                                   config.densityBinWidth,
-                                                  config.forceBinWidth,
                                                   {config.thermodynamicForceModulation},
                                                   config.enforceSymmetry,
                                                   false);
@@ -299,7 +296,7 @@ void runLennardJones_idealGas_localCap(Config& config)
         if (step % config.densityUpdateInterval == 0 && step > 0)
         {
             thermodynamicForce.update_if(
-                config.smoothingInverseDamping, config.smoothingRange, isInThermoForceUpdateRegion);
+                config.smoothingInverseDamping, config.smoothingRange, isInThermoForceRegion);
         }
 
         thermodynamicForce.applyInterpolated_if(atoms, isInThermoForceRegion);
@@ -421,7 +418,6 @@ int main(int argc, char* argv[])  // NOLINT
 
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
-    app.add_option("--forcebinwidth", config.forceBinWidth, "thermodynamic force bin width");
     app.add_option("--densbinwidth", config.densityBinWidth, "density bin width");
     app.add_option("--damping", config.smoothingDamping, "density smoothing damping factor");
     app.add_option("--neighbors", config.smoothingNeighbors, "density smoothing neighbors");

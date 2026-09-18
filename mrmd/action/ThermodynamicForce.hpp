@@ -35,8 +35,8 @@ private:
     data::MultiHistogram densityProfile_;
     idx_t densityProfileSamples_ = 0;
     real_t binVolume_;
-    const std::vector<real_t> targetDensities_;
-    const std::vector<real_t> thermodynamicForceModulations_;
+    const std::vector<real_t> targetDensity_;
+    const std::vector<real_t> thermodynamicForceModulation_;
     idx_t numTypes_;
 
     ScalarView forceFactor_;  ///< precalculated prefactor for force calculation
@@ -82,32 +82,17 @@ public:
     std::vector<real_t> getMuLeft() const;
     std::vector<real_t> getMuRight() const;
 
-    ThermodynamicForce(const std::vector<real_t>& targetDensities,
+    ThermodynamicForce(const std::vector<real_t>& targetDensity,
                        const data::Subdomain& subdomain,
-                       const real_t& requestedDensityGridSpacing,
-                       const real_t& requestedForceGridSpacing,
-                       const std::vector<real_t>& thermodynamicForceModulations,
+                       const real_t& requestedDensityBinWidth,
+                       const std::vector<real_t>& thermodynamicForceModulation,
                        const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 
-    ThermodynamicForce(const std::vector<real_t>& targetDensities,
+    ThermodynamicForce(const real_t targetDensity,
                        const data::Subdomain& subdomain,
-                       const real_t& requestedDensityGridSpacing,
-                       const std::vector<real_t>& thermodynamicForceModulations,
-                       const bool enforceSymmetry = false,
-                       const bool usePeriodicity = false);
-
-    ThermodynamicForce(const real_t& targetDensity,
-                       const data::Subdomain& subdomain,
-                       const real_t& requestedDensityGridSpacing,
-                       const real_t& thermodynamicForceModulation,
-                       const bool enforceSymmetry = false,
-                       const bool usePeriodicity = false);
-
-    ThermodynamicForce(const std::vector<real_t>& targetDensities,
-                       const data::Subdomain& subdomain,
-                       const idx_t& requestedDensityBinNumber,
-                       const std::vector<real_t>& thermodynamicForceModulations,
+                       const real_t& requestedDensityBinWidth,
+                       const real_t thermodynamicForceModulation,
                        const bool enforceSymmetry = false,
                        const bool usePeriodicity = false);
 };

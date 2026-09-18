@@ -45,7 +45,6 @@
 #include "io/RestoreH5MD.hpp"
 #include "io/RestoreThermoForce.hpp"
 #include "util/EnvironmentVariables.hpp"
-#include "util/IsInSymmetricInterval.hpp"
 #include "util/IsInSymmetricSlab.hpp"
 #include "util/PrintTable.hpp"
 #include "util/simulationSetup.hpp"

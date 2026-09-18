@@ -34,15 +34,26 @@ action::ThermodynamicForce restoreThermoForce(
     std::string word;
     int binNum = 0;
     int histNum = 0;
+    real_t grid0 = 0;
+    real_t grid1 = 0;
 
     std::ifstream fileThermoForce(filename);
     std::getline(fileThermoForce, line);
     std::stringstream gridLineStream(line);
     while (gridLineStream >> word)
     {
+        if (binNum == 0)
+        {
+            grid0 = std::stod(word);
+        }
+        if (binNum == 1)
+        {
+            grid1 = std::stod(word);
+        }
         binNum++;
     }
     MRMD_HOST_ASSERT_GREATER(binNum, 1);
+    real_t binWidth = grid1 - grid0;
 
     MultiView::HostMirror h_forcesRead("h_forcesRead", binNum, maxNumForces);
 
@@ -68,7 +79,7 @@ action::ThermodynamicForce restoreThermoForce(
 
     action::ThermodynamicForce thermodynamicForce(targetDensities,
                                                   subdomain,
-                                                  idx_c(binNum),
+                                                  binWidth,
                                                   thermodynamicForceModulations,
                                                   enforceSymmetry,
                                                   usePeriodicity);

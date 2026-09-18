@@ -23,109 +23,53 @@ namespace mrmd
 namespace action
 {
 
-ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
+ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensity,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
-                                       const real_t& requestedForceGridSpacing,
-                                       const std::vector<real_t>& thermodynamicForceModulations,
+                                       const real_t& requestedDensityBinWidth,
+                                       const std::vector<real_t>& thermodynamicForceModulation,
                                        const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : force_("thermodynamic-force",
              subdomain.minCorner[0],
              subdomain.maxCorner[0],
-             idx_c(std::ceil(subdomain.diameter[0] / requestedForceGridSpacing)),
-             idx_c(targetDensities.size())),
-      densityProfile_("density-profile",
-                      subdomain.minCorner[0],
-                      subdomain.maxCorner[0],
-                      idx_c(std::ceil(subdomain.diameter[0] / requestedDensityGridSpacing)),
-                      idx_c(targetDensities.size())),
+             idx_c(std::ceil(subdomain.diameter[0] / requestedDensityBinWidth)),
+             idx_c(targetDensity.size())),
+      densityProfile_("density-profile", force_),
       binVolume_(subdomain.diameter[1] * subdomain.diameter[2] * densityProfile_.binSize),
-      targetDensities_(targetDensities),
-      thermodynamicForceModulations_(thermodynamicForceModulations),
-      forceFactor_("force-factor", targetDensities.size()),
+      targetDensity_(targetDensity),
+      thermodynamicForceModulation_(thermodynamicForceModulation),
+      forceFactor_("force-factor", targetDensity.size()),
       enforceSymmetry_(enforceSymmetry),
       usePeriodicity_(usePeriodicity)
 {
     MRMD_HOST_CHECK_FLOAT_EQUAL(
         force_.binSize, requestedDensityBinWidth, "requested bin size is not achieved");
 
-    MRMD_HOST_CHECK_EQUAL(targetDensities.size(), thermodynamicForceModulations.size());
-    numTypes_ = idx_c(targetDensities.size());
+    MRMD_HOST_CHECK_EQUAL(targetDensity.size(), thermodynamicForceModulation.size());
+    numTypes_ = idx_c(targetDensity.size());
     MRMD_HOST_CHECK_GREATER(numTypes_, 0);
 
     auto hForceFactor = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), forceFactor_);
     for (auto i = 0; i < numTypes_; ++i)
     {
-        hForceFactor(i) = thermodynamicForceModulations_[i] / targetDensities_[i];
+        hForceFactor(i) = thermodynamicForceModulation_[i] / targetDensity_[i];
     }
     Kokkos::deep_copy(forceFactor_, hForceFactor);
 }
 
-ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
+ThermodynamicForce::ThermodynamicForce(const real_t targetDensity,
                                        const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
-                                       const std::vector<real_t>& thermodynamicForceModulations,
-                                       const bool enforceSymmetry,
-                                       const bool usePeriodicity)
-    : ThermodynamicForce(targetDensities,
-                         subdomain,
-                         requestedDensityGridSpacing,
-                         requestedDensityGridSpacing,
-                         thermodynamicForceModulations,
-                         enforceSymmetry,
-                         usePeriodicity)
-{
-}
-
-ThermodynamicForce::ThermodynamicForce(const real_t& targetDensity,
-                                       const data::Subdomain& subdomain,
-                                       const real_t& requestedDensityGridSpacing,
-                                       const real_t& thermodynamicForceModulation,
+                                       const real_t& requestedDensityBinWidth,
+                                       const real_t thermodynamicForceModulation,
                                        const bool enforceSymmetry,
                                        const bool usePeriodicity)
     : ThermodynamicForce(std::vector<real_t>{targetDensity},
                          subdomain,
-                         requestedDensityGridSpacing,
-                         std::vector<real_t>{thermodynamicForceModulation},
+                         requestedDensityBinWidth,
+                         {thermodynamicForceModulation},
                          enforceSymmetry,
                          usePeriodicity)
 {
-}
-
-ThermodynamicForce::ThermodynamicForce(const std::vector<real_t>& targetDensities,
-                                       const data::Subdomain& subdomain,
-                                       const idx_t& requestedDensityBinNumber,
-                                       const std::vector<real_t>& thermodynamicForceModulations,
-                                       const bool enforceSymmetry,
-                                       const bool usePeriodicity)
-    : force_("thermodynamic-force",
-             subdomain.minCorner[0],
-             subdomain.maxCorner[0],
-             requestedDensityBinNumber,
-             idx_c(targetDensities.size())),
-      densityProfile_("density-profile",
-                      subdomain.minCorner[0],
-                      subdomain.maxCorner[0],
-                      requestedDensityBinNumber,
-                      idx_c(targetDensities.size())),
-      binVolume_(subdomain.diameter[1] * subdomain.diameter[2] * densityProfile_.binSize),
-      targetDensities_(targetDensities),
-      thermodynamicForceModulations_(thermodynamicForceModulations),
-      forceFactor_("force-factor", targetDensities.size()),
-      enforceSymmetry_(enforceSymmetry),
-      usePeriodicity_(usePeriodicity)
-{
-    MRMD_HOST_CHECK_EQUAL(targetDensities.size(), thermodynamicForceModulations.size());
-    numTypes_ = idx_c(targetDensities.size());
-    MRMD_HOST_CHECK_GREATER(numTypes_, 0);
-
-    auto hForceFactor = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), forceFactor_);
-    for (auto i = 0; i < numTypes_; ++i)
-    {
-        hForceFactor(i) = thermodynamicForceModulations_[i] / targetDensities_[i];
-    }
-    Kokkos::deep_copy(forceFactor_, hForceFactor);
 }
 
 void ThermodynamicForce::sample(data::Atoms& atoms)

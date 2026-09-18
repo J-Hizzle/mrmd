@@ -31,19 +31,6 @@ target_link_libraries(04_LennardJones_EquilibrateLangevin
         PRIVATE mrmd CLI11::CLI11
         )
 
-add_executable(04_LennardJones_ThermodynamicForce
-        04_LennardJones_ThermodynamicForce.cpp
-        )
-target_link_libraries(04_LennardJones_ThermodynamicForce
-        PRIVATE mrmd CLI11::CLI11
-        )
-add_executable(04_LennardJones_ThermodynamicForce_InitialGuess
-        04_LennardJones_ThermodynamicForce_InitialGuess.cpp
-        )
-target_link_libraries(04_LennardJones_ThermodynamicForce_InitialGuess
-        PRIVATE mrmd CLI11::CLI11
-        )
-
 add_executable(04_LennardJones_AtomisticProduction
         04_LennardJones_AtomisticProduction.cpp
         )
