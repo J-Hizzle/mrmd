@@ -18,6 +18,14 @@ add_executable(04_LennardJones_GentleChemostat
 target_link_libraries(04_LennardJones_GentleChemostat
         PRIVATE mrmd CLI11::CLI11
         )
+
+add_executable(04_LennardJones_GentleChemostat_InitialGuess
+        04_LennardJones_GentleChemostat_InitialGuess.cpp
+        )
+target_link_libraries(04_LennardJones_GentleChemostat_InitialGuess
+        PRIVATE mrmd CLI11::CLI11
+        )
+
 add_executable(04_LennardJones_EquilibrateBerendsen
         04_LennardJones_EquilibrateBerendsen.cpp
         )
