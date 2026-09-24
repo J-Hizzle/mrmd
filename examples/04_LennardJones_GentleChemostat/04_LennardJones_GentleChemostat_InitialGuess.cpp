@@ -236,9 +236,9 @@ void gentleChemostat_initialGuess(Config& config)
     // main simulation loop
     for (auto step = 0; step < config.nsteps; ++step)
     {
-        // integrate equations of motion with local Langevin thermostat 
-        maxAtomDisplacement += langevinIntegrator.preForceIntegrate_apply_if(
-            atoms, config.dt, isInThermostatRegion);
+        // integrate equations of motion with local Langevin thermostat
+        maxAtomDisplacement +=
+            langevinIntegrator.preForceIntegrate_apply_if(atoms, config.dt, isInThermostatRegion);
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -419,7 +419,8 @@ int main(int argc, char* argv[])
 
     // initialize simulation configuration with command line interface
     Config config;
-    CLI::App app{"Lennard-Jones Gentle Chemostat Thermodynamic Force Simulation with initial guess"};
+    CLI::App app{
+        "Lennard-Jones Gentle Chemostat Thermodynamic Force Simulation with initial guess"};
     app.add_option("-n,--nsteps", config.nsteps, "number of simulation steps");
     app.add_option("-d,--tstep", config.dt, "time step");
     app.add_option("-o,--outint", config.outputInterval, "output interval");
@@ -429,7 +430,7 @@ int main(int argc, char* argv[])
     app.add_option("-T,--temperature", config.temperature, "thermostat target temperature");
     app.add_option("--friction", config.friction, "friction coefficient for thermostat");
 
-        app.add_option(
+    app.add_option(
         "--forceguess", config.fileRestoreTF, "initial guess for the thermodynamics force");
     app.add_option("--sampling", config.densitySamplingInterval, "density sampling interval");
     app.add_option("--update", config.densityUpdateInterval, "density update interval");
