@@ -188,8 +188,10 @@ void runTracerProduction(Config& config)
 
     // set up variables for counting particle flux across the domain
     ScalarView planeGrid("planeGrid", 2);
-    planeGrid(0) = boxCenter[0] + (config.innerIntRegionMax - config.r_cut);
-    planeGrid(1) = boxCenter[0] + config.innerIntRegionMax;
+    auto h_planeGrid = Kokkos::create_mirror_view(planeGrid);
+    h_planeGrid(0) = boxCenter[0] + (config.innerIntRegionMax - config.r_cut);
+    h_planeGrid(1) = boxCenter[0] + config.innerIntRegionMax;
+    Kokkos::deep_copy(planeGrid, h_planeGrid);
     analysis::AxialMassFluxProfile countingPlanes(planeGrid, AXIS::X);
     ScalarView fluxes("fluxes", 2);
 
