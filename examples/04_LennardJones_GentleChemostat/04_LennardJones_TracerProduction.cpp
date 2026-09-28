@@ -191,7 +191,7 @@ void runTracerProduction(Config& config)
     planeGrid(0) = boxCenter[0] + (config.innerIntRegionMax - config.r_cut);
     planeGrid(1) = boxCenter[0] + config.innerIntRegionMax;
     analysis::AxialMassFluxProfile countingPlanes(planeGrid, AXIS::X);
-    IndexView fluxes("fluxes", 2);
+    ScalarView fluxes("fluxes", 2);
 
     // output management
     auto dumpH5MD = io::DumpH5MD("J-Hizzle");
@@ -243,7 +243,7 @@ void runTracerProduction(Config& config)
         Kokkos::parallel_for(
             "AccumulateFluxes",
             Kokkos::RangePolicy<>(0, fluxes.extent(0)),
-            KOKKOS_LAMBDA(const idx_t jdx) { fluxes(jdx) += stepFluxes(jdx); });
+            KOKKOS_LAMBDA(const idx_t idx) { fluxes(idx) += stepFluxes(idx); });
 
         // check if neighbor list needs to be rebuilt
         if (maxAtomDisplacement >=
@@ -329,15 +329,14 @@ void runTracerProduction(Config& config)
                              E0 + Ek,
                              p,
                              msd,
-                             fluxesHost(0),
-                             fluxesHost(1),
+                             idx_c(fluxesHost(0)),
+                             idx_c(fluxesHost(1)),
                              atoms.numLocalAtoms,
                              atoms.numGhostAtoms);
 
             // dump statistics to file
             fStat << step << " " << timer.seconds() << " " << T << " " << Ek << " " << E0 << " "
-                  << E0 + Ek << " " << p << " " << msd << " " << fluxesHost(0) << " "
-                  << fluxesHost(1) << " "
+                  << idx_c(fluxesHost(0)) << " " << idx_c(fluxesHost(1)) << " "
 
                   << atoms.numLocalAtoms << " " << atoms.numGhostAtoms << " " << std::endl;
 
