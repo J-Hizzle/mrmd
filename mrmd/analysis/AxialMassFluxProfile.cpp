@@ -21,7 +21,9 @@
 namespace mrmd::analysis
 {
 AxialMassFluxProfile::AxialMassFluxProfile(const ScalarView& planeGrid, const AXIS axis)
-    : planeGrid_(planeGrid), axis_(axis), distancesToPlane_("distancesToPlane", 0, 0)
+    : planeGrid_(planeGrid),
+      axis_(axis),
+      distancesToPlanes_("distancesToPlanes", 0, planeGrid.extent(0))
 {
 }
 
@@ -29,41 +31,50 @@ void AxialMassFluxProfile::startCounting(data::Atoms& atoms)
 {
     auto planeGrid = planeGrid_;
     auto axis = axis_;
+    auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
 
     auto pos = atoms.getPos();
-    util::grow(distancesToPlane_, idx_c(atoms.size()));
-    auto distancesToPlane = distancesToPlane_;
+
+    Kokkos::resize(distancesToPlanes_, idx_c(numAtoms * 1.1_r), distancesToPlanes_.extent(1));
+    auto distancesToPlanes = distancesToPlanes_;
+
+    MRMD_DEVICE_CHECK_GREATEREQUAL(idx_c(distancesToPlanes.extent(0)), numAtoms);
+    MRMD_DEVICE_CHECK_EQUAL(idx_c(distancesToPlanes.extent(1)), idx_c(planeGrid.extent(0)));
+
     Kokkos::parallel_for(
         "ComputeDistancesToPlanes",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {atoms.size(), planeGrid.size()}),
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numAtoms, idx_c(planeGrid.extent(0))}),
         KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx) {
-            distancesToPlane(idx, jdx) = (planeGrid(jdx) - pos(idx, to_underlying(axis)));
+            distancesToPlanes(idx, jdx) = (planeGrid(jdx) - pos(idx, to_underlying(axis)));
         });
 }
 
-IndexView AxialMassFluxProfile::stopCounting(data::Atoms& atoms)
+ScalarView AxialMassFluxProfile::stopCounting(data::Atoms& atoms)
 {
     auto planeGrid = planeGrid_;
     auto axis = axis_;
+    auto numAtoms = atoms.numLocalAtoms + atoms.numGhostAtoms;
 
     auto pos = atoms.getPos();
-    MRMD_HOST_CHECK_GREATEREQUAL(distancesToPlane_.size(),
-                                 pos.size(),
+    auto mass = atoms.getMass();
+
+    MRMD_HOST_CHECK_GREATEREQUAL(idx_c(distancesToPlanes_.extent(0)),
+                                 numAtoms,
                                  "You must call startCounting before stopCounting. The number of "
                                  "particles is not allowed to change!");
-    auto distancesToPlane = distancesToPlane_;
-    IndexView counts("counts", planeGrid.size());
+    auto distancesToPlanes = distancesToPlanes_;
+    ScalarView massFlux("massFlux", idx_c(planeGrid.extent(0)));
     Kokkos::parallel_for(
-        "CountCrossings",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {atoms.size(), planeGrid.size()}),
+        "CalculateMassFlux",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {numAtoms, idx_c(planeGrid.extent(0))}),
         KOKKOS_LAMBDA(const idx_t idx, const idx_t jdx) {
             auto dist = (planeGrid(jdx) - pos(idx, to_underlying(axis)));
-            if (dist * distancesToPlane(idx, jdx) < 0)
+            if (dist * distancesToPlanes(idx, jdx) < 0)
             {
-                Kokkos::atomic_add(&counts(jdx), (dist > 0) ? 1 : -1);
+                Kokkos::atomic_add(&massFlux(jdx), (dist > 0) ? mass(idx) : -mass(idx));
             }
         });
-    return counts;
+    return massFlux;
 }
 
 }  // namespace mrmd::analysis

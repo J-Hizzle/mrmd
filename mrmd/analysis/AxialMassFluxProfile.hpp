@@ -25,7 +25,7 @@ class AxialMassFluxProfile
 {
     ScalarView planeGrid_;
     AXIS axis_;
-    MultiView distancesToPlane_;
+    MultiView distancesToPlanes_;
 
 public:
     AxialMassFluxProfile(const ScalarView &planeGrid, const AXIS axis);
@@ -43,6 +43,6 @@ public:
      * This method compares the current positions of the particles to their positions
      * recorded by startCounting() and determines how many have crossed the plane.
      */
-    IndexView stopCounting(data::Atoms &atoms);
+    ScalarView stopCounting(data::Atoms &atoms);
 };
 }  // namespace mrmd::analysis
