@@ -86,7 +86,8 @@ TEST(AxialMassFluxProfile, histogram)
 
     axialMassFluxProfile.startCounting(atoms);
     update(atoms);
-    auto histogram = axialMassFluxProfile.stopCounting(atoms);
+    auto histogram = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),
+                                                         axialMassFluxProfile.stopCounting(atoms));
 
     for (idx_t idx = 0; idx < 11; ++idx)
     {
